@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Secuencia para Revisiones de Facturación -->
+    <record id="seq_printer_billing_review" model="ir.sequence">
+        <field name="name">Revisión de Facturación de Impresoras</field>
+        <field name="code">printer.billing.review</field>
+        <field name="prefix">REV/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="number_increment">1</field>
+        <field name="implementation">standard</field>
+        <field name="company_id" eval="False"/>
+    </record>
+</odoo>

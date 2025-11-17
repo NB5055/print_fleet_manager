@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Categoría de Módulos -->
+    <record id="module_category_printer_monitor" model="ir.module.category">
+        <field name="name">Print Fleet Manager</field>
+        <field name="description">Gestión de flotas de impresoras y facturación por uso</field>
+        <field name="sequence">20</field>
+    </record>
+
+    <!-- Grupo: Usuario -->
+    <record id="group_printer_user" model="res.groups">
+        <field name="name">User</field>
+        <field name="category_id" ref="module_category_printer_monitor"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        <field name="comment">Usuario puede ver impresoras y lecturas de sus ubicaciones asignadas</field>
+    </record>
+
+    <!-- Grupo: Manager -->
+    <record id="group_printer_manager" model="res.groups">
+        <field name="name">Manager</field>
+        <field name="category_id" ref="module_category_printer_monitor"/>
+        <field name="implied_ids" eval="[(4, ref('group_printer_user'))]"/>
+        <field name="comment">Manager puede gestionar todas las ubicaciones, impresoras y generar facturas</field>
+    </record>
+
+    <!-- Reglas de Acceso a Registros -->
+
+    <!-- Ubicaciones: Los usuarios solo ven ubicaciones de sus clientes -->
+    <record id="printer_location_user_rule" model="ir.rule">
+        <field name="name">Printer Location: Usuario ve solo sus ubicaciones</field>
+        <field name="model_id" ref="model_printer_location"/>
+        <field name="domain_force">[('partner_id.user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_printer_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <!-- Ubicaciones: Los managers ven todo -->
+    <record id="printer_location_manager_rule" model="ir.rule">
+        <field name="name">Printer Location: Manager ve todo</field>
+        <field name="model_id" ref="model_printer_location"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_printer_manager'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+    <!-- Impresoras: Los usuarios solo ven impresoras de sus ubicaciones -->
+    <record id="printer_device_user_rule" model="ir.rule">
+        <field name="name">Printer Device: Usuario ve solo sus impresoras</field>
+        <field name="model_id" ref="model_printer_device"/>
+        <field name="domain_force">[('partner_id.user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_printer_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <!-- Impresoras: Los managers ven todo -->
+    <record id="printer_device_manager_rule" model="ir.rule">
+        <field name="name">Printer Device: Manager ve todo</field>
+        <field name="model_id" ref="model_printer_device"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_printer_manager'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+    <!-- Lecturas: Los usuarios solo ven lecturas de sus impresoras -->
+    <record id="printer_reading_user_rule" model="ir.rule">
+        <field name="name">Printer Reading: Usuario ve solo sus lecturas</field>
+        <field name="model_id" ref="model_printer_reading"/>
+        <field name="domain_force">[('partner_id.user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_printer_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <!-- Lecturas: Los managers ven todo -->
+    <record id="printer_reading_manager_rule" model="ir.rule">
+        <field name="name">Printer Reading: Manager ve todo</field>
+        <field name="model_id" ref="model_printer_reading"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_printer_manager'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+    <!-- Consumibles: Los usuarios solo ven consumibles de sus impresoras -->
+    <record id="printer_consumable_user_rule" model="ir.rule">
+        <field name="name">Printer Consumable: Usuario ve solo sus consumibles</field>
+        <field name="model_id" ref="model_printer_consumable"/>
+        <field name="domain_force">[('printer_id.partner_id.user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_printer_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <!-- Consumibles: Los managers ven todo -->
+    <record id="printer_consumable_manager_rule" model="ir.rule">
+        <field name="name">Printer Consumable: Manager ve todo</field>
+        <field name="model_id" ref="model_printer_consumable"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_printer_manager'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+    <!-- Alertas: Los usuarios solo ven alertas de sus impresoras -->
+    <record id="printer_alert_user_rule" model="ir.rule">
+        <field name="name">Printer Alert: Usuario ve solo sus alertas</field>
+        <field name="model_id" ref="model_printer_alert"/>
+        <field name="domain_force">[('printer_id.partner_id.user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_printer_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <!-- Alertas: Los managers ven todo -->
+    <record id="printer_alert_manager_rule" model="ir.rule">
+        <field name="name">Printer Alert: Manager ve todo</field>
+        <field name="model_id" ref="model_printer_alert"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_printer_manager'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+</odoo>

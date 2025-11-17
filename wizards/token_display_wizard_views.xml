@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Vista del Wizard de Token -->
+    <record id="view_token_display_wizard_form" model="ir.ui.view">
+        <field name="name">token.display.wizard.form</field>
+        <field name="model">token.display.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Token de Acceso Generado">
+                <sheet>
+                    <!-- Encabezado de éxito -->
+                    <div class="alert alert-success text-center mb-3" role="alert" style="margin: 0 0 20px 0;">
+                        <h3 style="margin: 10px 0;">
+                            <i class="fa fa-check-circle"></i>
+                            Token de Acceso Generado Exitosamente
+                        </h3>
+                    </div>
+
+                    <!-- Ubicación -->
+                    <group>
+                        <field name="location_id" readonly="1"/>
+                    </group>
+
+                    <separator string="Token de Acceso"/>
+
+                    <!-- Advertencia importante -->
+                    <div class="alert alert-warning" role="alert" style="margin: 10px 0;">
+                        <p style="margin: 5px 0;">
+                            <strong><i class="fa fa-exclamation-triangle"></i> ¡IMPORTANTE!</strong>
+                            Este token solo se muestra una vez. Cópielo ahora y guárdelo en un lugar seguro.
+                        </p>
+                    </div>
+
+                    <!-- Token (campo grande y visible) -->
+                    <group>
+                        <field name="access_token"
+                               readonly="1"
+                               widget="CopyClipboardText"
+                               class="font-monospace"
+                               style="font-size: 14px; font-weight: bold; letter-spacing: 0.5px;"/>
+                    </group>
+
+                    <separator string="Configuración"/>
+
+                    <!-- URL de Odoo -->
+                    <group>
+                        <field name="token_url" string="URL de Odoo" readonly="1" widget="CopyClipboardText"/>
+                    </group>
+
+                    <notebook>
+                        <page string="Instrucciones" name="instructions">
+                            <div style="padding: 15px; line-height: 2.0;">
+                                <p><b>1.</b> Abra el PrintServer en la ubicación correspondiente</p>
+                                <p><b>2.</b> Haga clic en el botón "⚙️ Configuración" en la barra superior</p>
+                                <p><b>3.</b> En la sección "Integración con Odoo":</p>
+                                <p style="margin-left: 25px;">• Active el checkbox "Habilitar Integración con Odoo"</p>
+                                <p style="margin-left: 25px;">• <b>URL de Odoo:</b> Pegue la URL mostrada arriba</p>
+                                <p style="margin-left: 25px;">• <b>API Key:</b> Pegue el token de acceso</p>
+                                <p><b>4.</b> Haga clic en "Probar Conexión" para verificar</p>
+                                <p><b>5.</b> Haga clic en "Guardar Configuración"</p>
+                                <p><b>6.</b> Reinicie el PrintServer para aplicar los cambios</p>
+                            </div>
+                        </page>
+                        <page string="Seguridad" name="security">
+                            <div style="padding: 15px; line-height: 2.0;">
+                                <p><b>⚠️ Importante:</b></p>
+                                <p>• Este token permite al PrintServer sincronizar datos con Odoo</p>
+                                <p>• Mantenga el token confidencial y seguro</p>
+                                <p>• Si cree que el token fue comprometido, genere uno nuevo</p>
+                                <p>• Al generar un nuevo token, el anterior dejará de funcionar inmediatamente</p>
+                                <p>• No comparta este token por correo electrónico o mensajes no cifrados</p>
+                            </div>
+                        </page>
+                    </notebook>
+                </sheet>
+                <footer>
+                    <button string="Cerrar" class="btn-primary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Action del Wizard -->
+    <record id="action_token_display_wizard" model="ir.actions.act_window">
+        <field name="name">Token de Acceso</field>
+        <field name="res_model">token.display.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

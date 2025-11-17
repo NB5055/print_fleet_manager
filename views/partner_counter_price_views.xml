@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree View: Lista de Precios por Cliente -->
+    <record id="view_partner_counter_price_tree" model="ir.ui.view">
+        <field name="name">partner.counter.price.tree</field>
+        <field name="model">partner.counter.price</field>
+        <field name="arch" type="xml">
+            <tree string="Precios por Cliente" editable="bottom">
+                <field name="partner_id" options="{'no_create': True}"/>
+                <field name="counter_type_id" options="{'no_create': True}"/>
+                <field name="counter_name" readonly="1"/>
+                <field name="counter_code" readonly="1" optional="show"/>
+                <field name="counter_oid" readonly="1" optional="hide"/>
+                <field name="unit_price" string="Precio"/>
+                <field name="notes" optional="hide"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Form View: Formulario de Precio -->
+    <record id="view_partner_counter_price_form" model="ir.ui.view">
+        <field name="name">partner.counter.price.form</field>
+        <field name="model">partner.counter.price</field>
+        <field name="arch" type="xml">
+            <form string="Precio de Contador">
+                <sheet>
+                    <group>
+                        <group string="Configuración">
+                            <field name="partner_id" options="{'no_create': True}"/>
+                            <field name="counter_type_id" options="{'no_create': True}"/>
+                        </group>
+                        <group string="Precio">
+                            <field name="unit_price" string="Precio Unitario"/>
+                        </group>
+                    </group>
+                    <group string="Información del Contador">
+                        <group>
+                            <field name="counter_name" readonly="1"/>
+                            <field name="counter_code" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="counter_oid" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Notas">
+                        <field name="notes" nolabel="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View: Filtros y Búsqueda -->
+    <record id="view_partner_counter_price_search" model="ir.ui.view">
+        <field name="name">partner.counter.price.search</field>
+        <field name="model">partner.counter.price</field>
+        <field name="arch" type="xml">
+            <search string="Buscar Precios">
+                <!-- Campos de búsqueda -->
+                <field name="partner_id" string="Cliente"/>
+                <field name="counter_type_id" string="Tipo de Contador"/>
+                <field name="counter_name" string="Nombre"/>
+                <field name="counter_code" string="Código"/>
+
+                <!-- Filtros predefinidos -->
+                <filter name="filter_has_price"
+                        string="Con Precio > 0"
+                        domain="[('unit_price', '>', 0)]"/>
+                <filter name="filter_zero_price"
+                        string="Precio = 0"
+                        domain="[('unit_price', '=', 0)]"/>
+
+                <separator/>
+
+                <!-- Agrupaciones -->
+                <group expand="0" string="Agrupar Por">
+                    <filter name="group_by_partner"
+                            string="Cliente"
+                            context="{'group_by': 'partner_id'}"/>
+                    <filter name="group_by_counter_type"
+                            string="Tipo de Contador"
+                            context="{'group_by': 'counter_type_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action: Abrir Precios -->
+    <record id="action_partner_counter_price" model="ir.actions.act_window">
+        <field name="name">Precios por Cliente</field>
+        <field name="res_model">partner.counter.price</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_group_by_partner': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Configurar precios de contadores por cliente
+            </p>
+            <p>
+                Aquí puedes definir precios personalizados para cada tipo de contador
+                por cliente. Si un cliente no tiene un precio configurado para un
+                tipo de contador específico, se usará precio 0 (sin cargo) en la facturación.
+            </p>
+        </field>
+    </record>
+
+    <!-- Menu: Facturación → Precios por Cliente -->
+    <menuitem id="menu_partner_counter_price"
+              name="Precios por Cliente"
+              parent="menu_print_fleet_billing"
+              action="action_partner_counter_price"
+              sequence="15"/>
+
+</odoo>

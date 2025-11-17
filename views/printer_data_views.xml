@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ==================== READINGS ==================== -->
+    <record id="view_printer_reading_tree" model="ir.ui.view">
+        <field name="name">printer.reading.tree</field>
+        <field name="model">printer.reading</field>
+        <field name="arch" type="xml">
+            <tree string="Lecturas" decoration-warning="is_billed == False" decoration-success="is_billed == True">
+                <field name="timestamp"/>
+                <field name="printer_id"/>
+                <field name="location_id"/>
+                <field name="partner_id"/>
+                <field name="status"/>
+                <field name="is_billed" widget="boolean_toggle"/>
+                <field name="billing_period"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_printer_reading_form" model="ir.ui.view">
+        <field name="name">printer.reading.form</field>
+        <field name="model">printer.reading</field>
+        <field name="arch" type="xml">
+            <form string="Lectura">
+                <header>
+                    <button name="action_mark_as_billed" string="Marcar como Facturado" type="object" invisible="is_billed" class="btn-warning"/>
+                    <button name="action_unmark_billed" string="Desmarcar Facturado" type="object" invisible="not is_billed" class="btn-secondary"/>
+                    <field name="status" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group string="Información">
+                            <field name="printer_id"/>
+                            <field name="location_id"/>
+                            <field name="partner_id"/>
+                            <field name="timestamp"/>
+                        </group>
+                        <group string="Facturación">
+                            <field name="billing_period"/>
+                            <field name="is_billed" widget="boolean_toggle"/>
+                            <field name="invoice_id" invisible="not is_billed"/>
+                            <field name="billed_date" invisible="not is_billed"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Contadores" name="counters">
+                            <field name="counter_ids">
+                                <tree editable="bottom">
+                                    <field name="counter_name"/>
+                                    <field name="counter_code"/>
+                                    <field name="oid"/>
+                                    <field name="value"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_printer_reading_search" model="ir.ui.view">
+        <field name="name">printer.reading.search</field>
+        <field name="model">printer.reading</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="printer_id"/>
+                <field name="location_id"/>
+                <field name="partner_id"/>
+                <filter string="No Facturado" name="not_billed" domain="[('is_billed', '=', False)]"/>
+                <filter string="Facturado" name="billed" domain="[('is_billed', '=', True)]"/>
+                <filter string="Este Mes" name="this_month" domain="[('billing_period', '=', context_today().strftime('%Y-%m'))]"/>
+                <group expand="0" string="Agrupar Por">
+                    <filter string="Impresora" name="group_printer" context="{'group_by': 'printer_id'}"/>
+                    <filter string="Cliente" name="group_partner" context="{'group_by': 'partner_id'}"/>
+                    <filter string="Período" name="group_period" context="{'group_by': 'billing_period'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_printer_reading" model="ir.actions.act_window">
+        <field name="name">Lecturas</field>
+        <field name="res_model">printer.reading</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_this_month': 1}</field>
+    </record>
+
+    <!-- ==================== CONSUMABLES ==================== -->
+    <record id="view_printer_consumable_tree" model="ir.ui.view">
+        <field name="name">printer.consumable.tree</field>
+        <field name="model">printer.consumable</field>
+        <field name="arch" type="xml">
+            <tree string="Consumibles" decoration-danger="status in ['critical', 'empty']" decoration-warning="status == 'low'">
+                <field name="printer_id"/>
+                <field name="location_id"/>
+                <field name="supply_name"/>
+                <field name="supply_type"/>
+                <field name="color"/>
+                <field name="level_percent" widget="progressbar"/>
+                <field name="status"/>
+                <field name="needs_replacement" invisible="1"/>
+                <field name="last_update"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_printer_consumable_form" model="ir.ui.view">
+        <field name="name">printer.consumable.form</field>
+        <field name="model">printer.consumable</field>
+        <field name="arch" type="xml">
+            <form string="Consumible">
+                <header>
+                    <button name="action_mark_as_replaced" string="Marcar como Reemplazado" type="object" class="btn-success" invisible="not needs_replacement"/>
+                    <field name="status" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group string="Información">
+                            <field name="printer_id"/>
+                            <field name="location_id"/>
+                            <field name="supply_name"/>
+                            <field name="supply_type"/>
+                            <field name="color"/>
+                            <field name="model"/>
+                        </group>
+                        <group string="Nivel">
+                            <field name="level_percent" widget="progressbar"/>
+                            <field name="previous_level"/>
+                            <field name="needs_replacement" widget="boolean_toggle"/>
+                            <field name="low_threshold"/>
+                            <field name="critical_threshold"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Estado">
+                            <field name="is_active" widget="boolean_toggle"/>
+                            <field name="first_detected"/>
+                            <field name="last_update"/>
+                            <field name="replacement_date"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_printer_consumable_search" model="ir.ui.view">
+        <field name="name">printer.consumable.search</field>
+        <field name="model">printer.consumable</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="supply_name"/>
+                <field name="printer_id"/>
+                <filter string="Necesita Reemplazo" name="needs_replacement" domain="[('needs_replacement', '=', True)]"/>
+                <filter string="Nivel Bajo" name="low" domain="[('status', '=', 'low')]"/>
+                <filter string="Nivel Crítico" name="critical" domain="[('status', 'in', ['critical', 'empty'])]"/>
+                <group expand="0" string="Agrupar Por">
+                    <filter string="Impresora" name="group_printer" context="{'group_by': 'printer_id'}"/>
+                    <filter string="Tipo" name="group_type" context="{'group_by': 'supply_type'}"/>
+                    <filter string="Color" name="group_color" context="{'group_by': 'color'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_printer_consumable" model="ir.actions.act_window">
+        <field name="name">Consumibles</field>
+        <field name="res_model">printer.consumable</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_needs_replacement': 1}</field>
+    </record>
+
+    <!-- ==================== ALERTS ==================== -->
+    <record id="view_printer_alert_tree" model="ir.ui.view">
+        <field name="name">printer.alert.tree</field>
+        <field name="model">printer.alert</field>
+        <field name="arch" type="xml">
+            <tree string="Alertas" decoration-danger="severity == 'critical' and not resolved" decoration-warning="severity in ['high', 'medium'] and not resolved" decoration-muted="resolved">
+                <field name="timestamp"/>
+                <field name="printer_id"/>
+                <field name="location_id"/>
+                <field name="alert_type"/>
+                <field name="severity" widget="badge" decoration-danger="severity == 'critical'" decoration-warning="severity == 'high'"/>
+                <field name="message"/>
+                <field name="acknowledged" column_invisible="1"/>
+                <field name="resolved" widget="boolean_toggle"/>
+                <field name="age_days"/>
+                <button name="action_acknowledge" string="Reconocer" type="object" invisible="acknowledged" icon="fa-eye"/>
+                <button name="action_resolve" string="Resolver" type="object" invisible="resolved" icon="fa-check" class="text-success"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_printer_alert_form" model="ir.ui.view">
+        <field name="name">printer.alert.form</field>
+        <field name="model">printer.alert</field>
+        <field name="arch" type="xml">
+            <form string="Alerta">
+                <header>
+                    <button name="action_acknowledge" string="Reconocer" type="object" invisible="acknowledged" class="btn-info"/>
+                    <button name="action_resolve" string="Resolver" type="object" invisible="resolved" class="btn-success"/>
+                    <button name="action_unresolve" string="Reabrir" type="object" invisible="not resolved" class="btn-warning"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="display_name"/></h1>
+                    </div>
+                    <group>
+                        <group string="Información">
+                            <field name="printer_id"/>
+                            <field name="location_id"/>
+                            <field name="partner_id"/>
+                            <field name="timestamp"/>
+                            <field name="age_days"/>
+                        </group>
+                        <group string="Clasificación">
+                            <field name="alert_type"/>
+                            <field name="severity"/>
+                        </group>
+                    </group>
+                    <group string="Mensaje">
+                        <field name="message" nolabel="1"/>
+                    </group>
+                    <group>
+                        <group string="Reconocimiento">
+                            <field name="acknowledged" widget="boolean_toggle"/>
+                            <field name="acknowledged_at" invisible="not acknowledged"/>
+                            <field name="acknowledged_by" invisible="not acknowledged"/>
+                        </group>
+                        <group string="Resolución">
+                            <field name="resolved" widget="boolean_toggle"/>
+                            <field name="resolved_at" invisible="not resolved"/>
+                            <field name="resolved_by" invisible="not resolved"/>
+                        </group>
+                    </group>
+                    <group string="Notas de Resolución" invisible="not resolved">
+                        <field name="resolution_notes" nolabel="1" placeholder="Describa cómo se resolvió la alerta..."/>
+                    </group>
+                    <group string="Notas Adicionales">
+                        <field name="notes" nolabel="1" placeholder="Notas adicionales..."/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_printer_alert_search" model="ir.ui.view">
+        <field name="name">printer.alert.search</field>
+        <field name="model">printer.alert</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="printer_id"/>
+                <field name="location_id"/>
+                <filter string="Activas" name="active" domain="[('resolved', '=', False)]"/>
+                <filter string="Resueltas" name="resolved" domain="[('resolved', '=', True)]"/>
+                <filter string="Críticas" name="critical" domain="[('severity', '=', 'critical')]"/>
+                <filter string="Sin Reconocer" name="not_acknowledged" domain="[('acknowledged', '=', False), ('resolved', '=', False)]"/>
+                <group expand="0" string="Agrupar Por">
+                    <filter string="Tipo" name="group_type" context="{'group_by': 'alert_type'}"/>
+                    <filter string="Severidad" name="group_severity" context="{'group_by': 'severity'}"/>
+                    <filter string="Impresora" name="group_printer" context="{'group_by': 'printer_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_printer_alert" model="ir.actions.act_window">
+        <field name="name">Alertas</field>
+        <field name="res_model">printer.alert</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_active': 1, 'search_default_not_acknowledged': 1}</field>
+    </record>
+
+</odoo>

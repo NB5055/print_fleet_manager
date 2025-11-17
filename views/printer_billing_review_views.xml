@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree View: Lista de Revisiones -->
+    <record id="view_printer_billing_review_tree" model="ir.ui.view">
+        <field name="name">printer.billing.review.tree</field>
+        <field name="model">printer.billing.review</field>
+        <field name="arch" type="xml">
+            <tree string="Revisiones de Facturación"
+                  decoration-info="state == 'draft'"
+                  decoration-success="state == 'invoiced'"
+                  decoration-warning="state == 'confirmed'"
+                  decoration-muted="state == 'cancelled'">
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="date_from"/>
+                <field name="date_to"/>
+                <field name="total_printers"/>
+                <field name="total_pages_all" sum="Total Páginas"/>
+                <field name="total_amount" sum="Total Monto"/>
+                <field name="invoice_id"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'draft'"
+                       decoration-success="state == 'invoiced'"
+                       decoration-warning="state == 'confirmed'"
+                       decoration-muted="state == 'cancelled'"/>
+                <field name="create_date"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Form View: Formulario de Revisión -->
+    <record id="view_printer_billing_review_form" model="ir.ui.view">
+        <field name="name">printer.billing.review.form</field>
+        <field name="model">printer.billing.review</field>
+        <field name="arch" type="xml">
+            <form string="Revisión de Facturación">
+                <header>
+                    <!-- Botones de Estado -->
+                    <button name="action_confirm"
+                            type="object"
+                            string="Confirmar"
+                            class="btn-primary"
+                            invisible="state != 'draft'"/>
+
+                    <button name="action_generate_invoice"
+                            type="object"
+                            string="Generar Factura"
+                            class="btn-success"
+                            invisible="state not in ['draft', 'confirmed']"/>
+
+                    <button name="action_view_invoice"
+                            type="object"
+                            string="Ver Factura"
+                            class="btn-info"
+                            invisible="not invoice_id"/>
+
+                    <button name="action_recalculate_all"
+                            type="object"
+                            string="Recalcular Contadores"
+                            invisible="state != 'draft'"/>
+
+                    <button name="action_set_to_draft"
+                            type="object"
+                            string="Volver a Borrador"
+                            invisible="state != 'confirmed'"/>
+
+                    <button name="action_cancel"
+                            type="object"
+                            string="Cancelar"
+                            invisible="state in ['cancelled', 'invoiced']"/>
+
+                    <!-- Estado -->
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,confirmed,invoiced"/>
+                </header>
+
+                <sheet>
+                    <!-- Título con Referencia -->
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+
+                    <!-- Ribbon para estado -->
+                    <widget name="web_ribbon" title="Facturado" bg_color="bg-success"
+                            invisible="state != 'invoiced'"/>
+                    <widget name="web_ribbon" title="Cancelado" bg_color="bg-danger"
+                            invisible="state != 'cancelled'"/>
+
+                    <group>
+                        <group string="Cliente y Período">
+                            <field name="partner_id" readonly="state != 'draft'"/>
+                            <field name="date_from" readonly="state != 'draft'"/>
+                            <field name="date_to" readonly="state != 'draft'"/>
+                        </group>
+                        <group string="Opciones">
+                            <field name="group_by_location" readonly="state != 'draft'"/>
+                            <field name="only_not_billed" readonly="state != 'draft'"/>
+                            <field name="invoice_id"
+                                   invisible="not invoice_id"
+                                   context="{'form_view_ref': 'account.view_move_form'}"/>
+                            <field name="invoice_state"
+                                   invisible="not invoice_id"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Impresoras" name="printers">
+                            <field name="line_ids"
+                                   context="{'default_include_in_invoice': True}">
+                                <tree editable="bottom"
+                                      decoration-muted="not include_in_invoice"
+                                      decoration-success="include_in_invoice and total_pages > 0">
+                                    <field name="review_state" column_invisible="1"/>
+                                    <field name="include_in_invoice" widget="boolean_toggle"
+                                           readonly="review_state != 'draft'"/>
+                                    <field name="printer_name"
+                                           readonly="review_state != 'draft'"/>
+                                    <field name="location_name"/>
+                                    <field name="total_pages" sum="Total Páginas"/>
+                                    <field name="estimated_amount" sum="Total Estimado"/>
+                                    <field name="notes"
+                                           readonly="review_state != 'draft'"/>
+                                    <field name="printer_id" column_invisible="1"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <page string="Desglose de Contadores" name="counters_detail">
+                            <field name="counter_ids">
+                                <tree editable="bottom"
+                                      decoration-muted="total_pages == 0">
+                                    <field name="review_state" column_invisible="1"/>
+                                    <field name="printer_name" readonly="1"/>
+                                    <field name="location_name" readonly="1"/>
+                                    <field name="counter_name" readonly="1"/>
+                                    <field name="oid" readonly="1" optional="hide"/>
+                                    <field name="counter_start"
+                                           readonly="review_state != 'draft'"/>
+                                    <field name="counter_end"
+                                           readonly="review_state != 'draft'"/>
+                                    <field name="total_pages" sum="Total Páginas"/>
+                                    <field name="unit_price"
+                                           readonly="review_state != 'draft'"/>
+                                    <field name="subtotal" sum="Total Monto"/>
+                                    <field name="counter_type_id" column_invisible="1"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <page string="Totales" name="totals">
+                            <group>
+                                <group string="Resumen General">
+                                    <field name="total_printers"/>
+                                    <field name="total_pages_all"/>
+                                </group>
+                                <group string="Facturación">
+                                    <field name="currency_id" invisible="1"/>
+                                    <field name="total_amount" widget="monetary"/>
+                                </group>
+                            </group>
+
+                            <separator string="Detalle por Tipo de Contador"/>
+                            <field name="totals_by_counter_type" nolabel="1" widget="html"/>
+                        </page>
+
+                        <page string="Auditoría" name="audit">
+                            <group>
+                                <group string="Creación">
+                                    <field name="user_id"/>
+                                    <field name="create_date"/>
+                                </group>
+                                <group string="Confirmación">
+                                    <field name="confirmed_by"/>
+                                    <field name="confirmed_date"/>
+                                </group>
+                                <group string="Facturación">
+                                    <field name="invoiced_date"/>
+                                </group>
+                            </group>
+                            <group string="Notas Internas">
+                                <field name="notes" nolabel="1"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+
+                <!-- Chatter -->
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View: Filtros y Agrupaciones -->
+    <record id="view_printer_billing_review_search" model="ir.ui.view">
+        <field name="name">printer.billing.review.search</field>
+        <field name="model">printer.billing.review</field>
+        <field name="arch" type="xml">
+            <search string="Buscar Revisiones">
+                <!-- Campos de búsqueda -->
+                <field name="name" string="Referencia"/>
+                <field name="partner_id" string="Cliente"/>
+                <field name="invoice_id" string="Factura"/>
+
+                <!-- Filtros predefinidos -->
+                <filter name="filter_draft"
+                        string="Borradores"
+                        domain="[('state', '=', 'draft')]"/>
+                <filter name="filter_confirmed"
+                        string="Confirmadas"
+                        domain="[('state', '=', 'confirmed')]"/>
+                <filter name="filter_invoiced"
+                        string="Facturadas"
+                        domain="[('state', '=', 'invoiced')]"/>
+                <filter name="filter_cancelled"
+                        string="Canceladas"
+                        domain="[('state', '=', 'cancelled')]"/>
+
+                <separator/>
+
+                <filter name="filter_this_month"
+                        string="Este Mes"
+                        domain="[('create_date', '&gt;=', (context_today() - relativedelta(months=1)).strftime('%Y-%m-01')),
+                                 ('create_date', '&lt;=', (context_today()).strftime('%Y-%m-%d'))]"/>
+                <filter name="filter_last_month"
+                        string="Mes Anterior"
+                        domain="[('create_date', '&gt;=', (context_today() - relativedelta(months=2)).strftime('%Y-%m-01')),
+                                 ('create_date', '&lt;', (context_today() - relativedelta(months=1)).strftime('%Y-%m-01'))]"/>
+
+                <separator/>
+
+                <filter name="filter_has_invoice"
+                        string="Con Factura"
+                        domain="[('invoice_id', '!=', False)]"/>
+                <filter name="filter_no_invoice"
+                        string="Sin Factura"
+                        domain="[('invoice_id', '=', False)]"/>
+
+                <!-- Agrupaciones -->
+                <group expand="0" string="Agrupar Por">
+                    <filter name="group_by_partner"
+                            string="Cliente"
+                            context="{'group_by': 'partner_id'}"/>
+                    <filter name="group_by_state"
+                            string="Estado"
+                            context="{'group_by': 'state'}"/>
+                    <filter name="group_by_date_from"
+                            string="Período (Desde)"
+                            context="{'group_by': 'date_from'}"/>
+                    <filter name="group_by_create_date"
+                            string="Fecha de Creación"
+                            context="{'group_by': 'create_date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action: Abrir Revisiones -->
+    <record id="action_printer_billing_review" model="ir.actions.act_window">
+        <field name="name">Revisiones de Facturación</field>
+        <field name="res_model">printer.billing.review</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_filter_draft': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Crear nueva revisión de facturación
+            </p>
+            <p>
+                Las revisiones de facturación permiten revisar y ajustar los contadores
+                de impresoras antes de generar facturas. Se guardan todas las revisiones
+                con historial completo de cambios.
+            </p>
+        </field>
+    </record>
+
+</odoo>

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree View: Lista de Tipos de Contadores -->
+    <record id="view_counter_type_tree" model="ir.ui.view">
+        <field name="name">counter.type.tree</field>
+        <field name="model">counter.type</field>
+        <field name="arch" type="xml">
+            <tree string="Tipos de Contadores">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="oid"/>
+                <field name="product_id"/>
+                <field name="unit_price"/>
+                <field name="usage_count"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Form View: Formulario de Tipo de Contador -->
+    <record id="view_counter_type_form" model="ir.ui.view">
+        <field name="name">counter.type.form</field>
+        <field name="model">counter.type</field>
+        <field name="arch" type="xml">
+            <form string="Tipo de Contador">
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="toggle_active"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-archive">
+                            <field name="active" widget="boolean_button"
+                                   options="{'terminology': 'archive'}"/>
+                        </button>
+                    </div>
+
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="ej: Páginas Monocromáticas"/>
+                        </h1>
+                    </div>
+
+                    <group>
+                        <group string="Identificación SNMP">
+                            <field name="oid" placeholder="ej: 1.3.6.1.2.1.43.10.2.1.4.1.1"/>
+                            <field name="code" placeholder="ej: mono, color, total"/>
+                        </group>
+                        <group string="Facturación">
+                            <field name="product_id"
+                                   options="{'no_create': True, 'no_open': True}"/>
+                            <field name="unit_price" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <group>
+                        <group string="Visualización">
+                            <field name="sequence"/>
+                            <field name="usage_count"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View: Búsqueda y Filtros -->
+    <record id="view_counter_type_search" model="ir.ui.view">
+        <field name="name">counter.type.search</field>
+        <field name="model">counter.type</field>
+        <field name="arch" type="xml">
+            <search string="Buscar Tipos de Contadores">
+                <field name="name" string="Nombre"/>
+                <field name="code" string="Código"/>
+                <field name="oid" string="OID"/>
+
+                <filter name="filter_active"
+                        string="Activos"
+                        domain="[('active', '=', True)]"/>
+                <filter name="filter_inactive"
+                        string="Inactivos"
+                        domain="[('active', '=', False)]"/>
+                <separator/>
+                <filter name="filter_with_product"
+                        string="Con Producto"
+                        domain="[('product_id', '!=', False)]"/>
+                <filter name="filter_no_product"
+                        string="Sin Producto"
+                        domain="[('product_id', '=', False)]"/>
+
+                <group expand="0" string="Agrupar Por">
+                    <filter name="group_by_active"
+                            string="Estado"
+                            context="{'group_by': 'active'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action: Abrir Tipos de Contadores -->
+    <record id="action_counter_type" model="ir.actions.act_window">
+        <field name="name">Tipos de Contadores</field>
+        <field name="res_model">counter.type</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_filter_active': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Crear nuevo tipo de contador
+            </p>
+            <p>
+                Los tipos de contadores definen qué contadores SNMP pueden ser recolectados
+                de las impresoras. Cada tipo se identifica por su OID SNMP y puede asociarse
+                a un producto para facturación.
+            </p>
+        </field>
+    </record>
+
+</odoo>

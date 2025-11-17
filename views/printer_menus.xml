@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Menu Root -->
+    <menuitem id="menu_printer_root" name="Print Fleet Manager" sequence="10" web_icon="print_fleet_manager,static/description/icon.png"/>
+
+    <!-- Menu Principal -->
+    <menuitem id="menu_printer_main" name="Monitor" parent="menu_printer_root" sequence="10"/>
+
+    <!-- Submenus -->
+    <menuitem id="menu_printer_device" name="Impresoras" parent="menu_printer_main" action="action_printer_device" sequence="10"/>
+    <menuitem id="menu_printer_location" name="Ubicaciones" parent="menu_printer_main" action="action_printer_location" sequence="20"/>
+    <menuitem id="menu_printer_alert" name="Alertas" parent="menu_printer_main" action="action_printer_alert" sequence="30"/>
+
+    <!-- Menu Datos -->
+    <menuitem id="menu_printer_data" name="Datos" parent="menu_printer_root" sequence="20"/>
+    <menuitem id="menu_printer_reading" name="Lecturas" parent="menu_printer_data" action="action_printer_reading" sequence="10"/>
+    <menuitem id="menu_printer_consumable" name="Consumibles" parent="menu_printer_data" action="action_printer_consumable" sequence="20"/>
+
+    <!-- Menu Facturación -->
+    <menuitem id="menu_printer_billing" name="Facturación" parent="menu_printer_root" sequence="30"/>
+    <menuitem id="menu_printer_billing_generate" name="Generar Facturas" parent="menu_printer_billing" action="action_printer_billing_wizard" sequence="10"/>
+    <menuitem id="menu_printer_billing_review" name="Revisiones de Facturación" parent="menu_printer_billing" action="action_printer_billing_review" sequence="15"/>
+    <menuitem id="menu_printer_billing_report" name="Reporte de Uso" parent="menu_printer_billing" action="action_printer_usage_report" sequence="20"/>
+
+    <!-- Menu Configuración -->
+    <menuitem id="menu_printer_config" name="Configuración" parent="menu_printer_root" sequence="40"/>
+    <menuitem id="menu_counter_type" name="Tipos de Contadores" parent="menu_printer_config" action="action_counter_type" sequence="10"/>
+
+</odoo>

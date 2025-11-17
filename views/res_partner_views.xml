@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Extensión del Formulario de Cliente con Precios de Contadores -->
+    <record id="view_res_partner_form_inherit_counter_prices" model="ir.ui.view">
+        <field name="name">res.partner.form.inherit.counter.prices</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+
+            <!-- Botón Inteligente: Precios Configurados -->
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button name="action_view_counter_prices"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-dollar">
+                    <field name="counter_prices_count" widget="statinfo" string="Precios"/>
+                </button>
+            </xpath>
+
+            <!-- Pestaña: Precios de Impresión -->
+            <xpath expr="//notebook" position="inside">
+                <page string="Precios de Impresión" name="counter_prices">
+                    <group>
+                        <p class="text-muted">
+                            Configure precios personalizados para cada tipo de contador.
+                            Si no se configura un precio, se usará 0 (sin cargo) en la facturación.
+                        </p>
+                    </group>
+                    <field name="counter_price_ids">
+                        <tree editable="bottom">
+                            <field name="counter_type_id" options="{'no_create': True}"/>
+                            <field name="counter_name" readonly="1"/>
+                            <field name="counter_code" readonly="1" optional="show"/>
+                            <field name="counter_oid" readonly="1" optional="hide"/>
+                            <field name="unit_price" string="Precio"/>
+                            <field name="notes" optional="hide"/>
+                        </tree>
+                    </field>
+                </page>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>

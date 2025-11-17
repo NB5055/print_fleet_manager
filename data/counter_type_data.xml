@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Tipos de Contadores Estándar SNMP -->
+        <!-- Estos OIDs son estándares de la especificación Printer MIB RFC 3805 -->
+
+        <!-- Total de Páginas -->
+        <record id="counter_type_total" model="counter.type">
+            <field name="name">Total de Páginas</field>
+            <field name="code">total</field>
+            <field name="oid">1.3.6.1.2.1.43.10.2.1.4.1.1</field>
+            <field name="sequence">10</field>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!-- Páginas Monocromáticas -->
+        <record id="counter_type_mono" model="counter.type">
+            <field name="name">Páginas Monocromáticas</field>
+            <field name="code">mono</field>
+            <field name="oid">1.3.6.1.4.1.18334.1.1.1.5.7.2.2.1.5.1.1</field>
+            <field name="sequence">20</field>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!-- Páginas a Color -->
+        <record id="counter_type_color" model="counter.type">
+            <field name="name">Páginas a Color</field>
+            <field name="code">color</field>
+            <field name="oid">1.3.6.1.4.1.18334.1.1.1.5.7.2.2.1.5.1.2</field>
+            <field name="sequence">30</field>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!-- Páginas Dúplex -->
+        <record id="counter_type_duplex" model="counter.type">
+            <field name="name">Páginas Dúplex</field>
+            <field name="code">duplex</field>
+            <field name="oid">1.3.6.1.4.1.18334.1.1.1.5.7.2.2.1.5.1.4</field>
+            <field name="sequence">40</field>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!-- Páginas Simplex (Una Cara) -->
+        <record id="counter_type_simplex" model="counter.type">
+            <field name="name">Páginas Simplex</field>
+            <field name="code">simplex</field>
+            <field name="oid">1.3.6.1.4.1.18334.1.1.1.5.7.2.2.1.5.1.3</field>
+            <field name="sequence">50</field>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!-- Total de Copias -->
+        <record id="counter_type_copies" model="counter.type">
+            <field name="name">Total de Copias</field>
+            <field name="code">copies</field>
+            <field name="oid">1.3.6.1.4.1.18334.1.1.1.5.7.2.1.1.5.4.1</field>
+            <field name="sequence">60</field>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!-- Total de Escaneos -->
+        <record id="counter_type_scans" model="counter.type">
+            <field name="name">Total de Escaneos</field>
+            <field name="code">scans</field>
+            <field name="oid">1.3.6.1.4.1.18334.1.1.1.5.7.2.1.1.5.3.1</field>
+            <field name="sequence">70</field>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!-- Total de Faxes -->
+        <record id="counter_type_fax" model="counter.type">
+            <field name="name">Total de Faxes</field>
+            <field name="code">fax</field>
+            <field name="oid">1.3.6.1.4.1.18334.1.1.1.5.7.2.1.1.5.5.1</field>
+            <field name="sequence">80</field>
+            <field name="active" eval="False"/>
+        </record>
+
+    </data>
+</odoo>
