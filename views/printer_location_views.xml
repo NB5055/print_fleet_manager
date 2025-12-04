@@ -88,10 +88,10 @@
         <field name="arch" type="xml">
             <form string="Ubicación de Impresoras">
                 <header>
-                    <button name="action_generate_token" string="Generar Nuevo Token" type="object" class="oe_highlight" invisible="access_token"/>
+                    <button name="action_generate_token" string="Generar Nuevo Token" type="object" class="oe_highlight" attrs="{'invisible': [('access_token', '!=', False)]}"/>
                     <button name="action_generate_token" string="Regenerar Token" type="object" confirm="¿Está seguro de regenerar el token? El token actual dejará de funcionar."/>
-                    <button name="action_activate_token" string="Activar Token" type="object" invisible="token_active" class="btn-success"/>
-                    <button name="action_deactivate_token" string="Desactivar Token" type="object" invisible="not token_active" class="btn-warning" confirm="¿Está seguro de desactivar el token? El PrintServer no podrá enviar datos."/>
+                    <button name="action_activate_token" string="Activar Token" type="object" attrs="{'invisible': [('token_active', '=', True)]}" class="btn-success"/>
+                    <button name="action_deactivate_token" string="Desactivar Token" type="object" attrs="{'invisible': [('token_active', '=', False)]}" class="btn-warning" confirm="¿Está seguro de desactivar el token? El PrintServer no podrá enviar datos."/>
                     <button name="action_view_printers" string="Ver Impresoras" type="object" class="btn-primary"/>
                     <field name="sync_status" widget="statusbar" statusbar_visible="never,success,error"/>
                 </header>
@@ -107,7 +107,7 @@
                             </div>
                         </button>
                     </div>
-                    <widget name="web_ribbon" title="Inactiva" bg_color="bg-danger" invisible="is_active"/>
+                    <widget name="web_ribbon" title="Inactiva" bg_color="bg-danger" attrs="{'invisible': [('is_active', '=', True)]}"/>
                     <div class="oe_title">
                         <h1>
                             <field name="name" placeholder="ej: Oficina Central, Sucursal Norte..."/>
@@ -133,7 +133,7 @@
                         <page string="Token de Acceso" name="token">
                             <group>
                                 <group string="Configuración del Token">
-                                    <field name="access_token" password="True" invisible="not access_token"/>
+                                    <field name="access_token" password="True" attrs="{'invisible': [('access_token', '=', False)]}"/>
                                     <field name="token_active" widget="boolean_toggle"/>
                                     <field name="token_created_date"/>
                                     <field name="token_last_used"/>

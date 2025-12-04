@@ -176,7 +176,7 @@
                             <field name="active_alerts_count" widget="statinfo" string="Alertas Activas"/>
                         </button>
                     </div>
-                    <widget name="web_ribbon" title="Inactiva" bg_color="bg-danger" invisible="is_active"/>
+                    <widget name="web_ribbon" title="Inactiva" bg_color="bg-danger" attrs="{'invisible': [('is_active', '=', True)]}"/>
                     <div class="oe_title">
                         <h1><field name="name" placeholder="Nombre de la impresora..."/></h1>
                     </div>

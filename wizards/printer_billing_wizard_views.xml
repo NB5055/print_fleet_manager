@@ -17,7 +17,7 @@
                         <field name="only_not_billed"/>
                     </group>
                 </group>
-                <group string="Previsualización" invisible="not partner_id">
+                <group string="Previsualización" attrs="{'invisible': [('partner_id', '=', False)]}">
                     <group>
                         <field name="total_printers" readonly="1"/>
                         <field name="total_pages" readonly="1"/>

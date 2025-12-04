@@ -103,11 +103,4 @@
         </field>
     </record>
 
-    <!-- Menu: Facturación → Precios por Cliente -->
-    <menuitem id="menu_partner_counter_price"
-              name="Precios por Cliente"
-              parent="menu_print_fleet_billing"
-              action="action_partner_counter_price"
-              sequence="15"/>
-
 </odoo>

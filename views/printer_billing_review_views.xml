@@ -40,34 +40,34 @@
                             type="object"
                             string="Confirmar"
                             class="btn-primary"
-                            invisible="state != 'draft'"/>
+                            attrs="{'invisible': [('state', '!=', 'draft')]}"/>
 
                     <button name="action_generate_invoice"
                             type="object"
                             string="Generar Factura"
                             class="btn-success"
-                            invisible="state not in ['draft', 'confirmed']"/>
+                            attrs="{'invisible': [('state', 'not in', ('draft', 'confirmed'))]}"/>
 
                     <button name="action_view_invoice"
                             type="object"
                             string="Ver Factura"
                             class="btn-info"
-                            invisible="not invoice_id"/>
+                            attrs="{'invisible': [('invoice_id', '=', False)]}"/>
 
                     <button name="action_recalculate_all"
                             type="object"
                             string="Recalcular Contadores"
-                            invisible="state != 'draft'"/>
+                            attrs="{'invisible': [('state', '!=', 'draft')]}"/>
 
                     <button name="action_set_to_draft"
                             type="object"
                             string="Volver a Borrador"
-                            invisible="state != 'confirmed'"/>
+                            attrs="{'invisible': [('state', '!=', 'confirmed')]}"/>
 
                     <button name="action_cancel"
                             type="object"
                             string="Cancelar"
-                            invisible="state in ['cancelled', 'invoiced']"/>
+                            attrs="{'invisible': [('state', 'in', ('cancelled', 'invoiced'))]}"/>
 
                     <!-- Estado -->
                     <field name="state" widget="statusbar"
@@ -84,24 +84,24 @@
 
                     <!-- Ribbon para estado -->
                     <widget name="web_ribbon" title="Facturado" bg_color="bg-success"
-                            invisible="state != 'invoiced'"/>
+                            attrs="{'invisible': [('state', '!=', 'invoiced')]}"/>
                     <widget name="web_ribbon" title="Cancelado" bg_color="bg-danger"
-                            invisible="state != 'cancelled'"/>
+                            attrs="{'invisible': [('state', '!=', 'cancelled')]}"/>
 
                     <group>
                         <group string="Cliente y Período">
-                            <field name="partner_id" readonly="state != 'draft'"/>
-                            <field name="date_from" readonly="state != 'draft'"/>
-                            <field name="date_to" readonly="state != 'draft'"/>
+                            <field name="partner_id" attrs="{'readonly': [('state', '!=', 'draft')]}"/>
+                            <field name="date_from" attrs="{'readonly': [('state', '!=', 'draft')]}"/>
+                            <field name="date_to" attrs="{'readonly': [('state', '!=', 'draft')]}"/>
                         </group>
                         <group string="Opciones">
-                            <field name="group_by_location" readonly="state != 'draft'"/>
-                            <field name="only_not_billed" readonly="state != 'draft'"/>
+                            <field name="group_by_location" attrs="{'readonly': [('state', '!=', 'draft')]}"/>
+                            <field name="only_not_billed" attrs="{'readonly': [('state', '!=', 'draft')]}"/>
                             <field name="invoice_id"
-                                   invisible="not invoice_id"
+                                   attrs="{'invisible': [('invoice_id', '=', False)]}"
                                    context="{'form_view_ref': 'account.view_move_form'}"/>
                             <field name="invoice_state"
-                                   invisible="not invoice_id"/>
+                                   attrs="{'invisible': [('invoice_id', '=', False)]}"/>
                         </group>
                     </group>
 
@@ -112,18 +112,18 @@
                                 <tree editable="bottom"
                                       decoration-muted="not include_in_invoice"
                                       decoration-success="include_in_invoice and total_pages > 0">
-                                    <field name="review_state" column_invisible="1"/>
+                                    <field name="review_state" invisible="1"/>
                                     <field name="include_in_invoice" widget="boolean_toggle"
-                                           readonly="review_state != 'draft'"/>
+                                           attrs="{'readonly': [('review_state', '!=', 'draft')]}"/>
                                     <field name="printer_name"
-                                           readonly="review_state != 'draft'"/>
+                                           attrs="{'readonly': [('review_state', '!=', 'draft')]}"/>
                                     <field name="location_name"/>
                                     <field name="total_pages" sum="Total Páginas"/>
                                     <field name="estimated_amount" sum="Total Estimado"/>
                                     <field name="notes"
-                                           readonly="review_state != 'draft'"/>
-                                    <field name="printer_id" column_invisible="1"/>
-                                    <field name="currency_id" column_invisible="1"/>
+                                           attrs="{'readonly': [('review_state', '!=', 'draft')]}"/>
+                                    <field name="printer_id" invisible="1"/>
+                                    <field name="currency_id" invisible="1"/>
                                 </tree>
                             </field>
                         </page>
@@ -132,21 +132,21 @@
                             <field name="counter_ids">
                                 <tree editable="bottom"
                                       decoration-muted="total_pages == 0">
-                                    <field name="review_state" column_invisible="1"/>
+                                    <field name="review_state" invisible="1"/>
                                     <field name="printer_name" readonly="1"/>
                                     <field name="location_name" readonly="1"/>
                                     <field name="counter_name" readonly="1"/>
                                     <field name="oid" readonly="1" optional="hide"/>
                                     <field name="counter_start"
-                                           readonly="review_state != 'draft'"/>
+                                           attrs="{'readonly': [('review_state', '!=', 'draft')]}"/>
                                     <field name="counter_end"
-                                           readonly="review_state != 'draft'"/>
+                                           attrs="{'readonly': [('review_state', '!=', 'draft')]}"/>
                                     <field name="total_pages" sum="Total Páginas"/>
                                     <field name="unit_price"
-                                           readonly="review_state != 'draft'"/>
+                                           attrs="{'readonly': [('review_state', '!=', 'draft')]}"/>
                                     <field name="subtotal" sum="Total Monto"/>
-                                    <field name="counter_type_id" column_invisible="1"/>
-                                    <field name="currency_id" column_invisible="1"/>
+                                    <field name="counter_type_id" invisible="1"/>
+                                    <field name="currency_id" invisible="1"/>
                                 </tree>
                             </field>
                         </page>

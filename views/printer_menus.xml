@@ -19,8 +19,9 @@
     <!-- Menu Facturación -->
     <menuitem id="menu_printer_billing" name="Facturación" parent="menu_printer_root" sequence="30"/>
     <menuitem id="menu_printer_billing_generate" name="Generar Facturas" parent="menu_printer_billing" action="action_printer_billing_wizard" sequence="10"/>
-    <menuitem id="menu_printer_billing_review" name="Revisiones de Facturación" parent="menu_printer_billing" action="action_printer_billing_review" sequence="15"/>
-    <menuitem id="menu_printer_billing_report" name="Reporte de Uso" parent="menu_printer_billing" action="action_printer_usage_report" sequence="20"/>
+    <menuitem id="menu_partner_counter_price" name="Precios por Cliente" parent="menu_printer_billing" action="action_partner_counter_price" sequence="15"/>
+    <menuitem id="menu_printer_billing_review" name="Revisiones de Facturación" parent="menu_printer_billing" action="action_printer_billing_review" sequence="20"/>
+    <menuitem id="menu_printer_billing_report" name="Reporte de Uso" parent="menu_printer_billing" action="action_printer_usage_report" sequence="30"/>
 
     <!-- Menu Configuración -->
     <menuitem id="menu_printer_config" name="Configuración" parent="menu_printer_root" sequence="40"/>

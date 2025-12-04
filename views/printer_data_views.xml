@@ -23,8 +23,8 @@
         <field name="arch" type="xml">
             <form string="Lectura">
                 <header>
-                    <button name="action_mark_as_billed" string="Marcar como Facturado" type="object" invisible="is_billed" class="btn-warning"/>
-                    <button name="action_unmark_billed" string="Desmarcar Facturado" type="object" invisible="not is_billed" class="btn-secondary"/>
+                    <button name="action_mark_as_billed" string="Marcar como Facturado" type="object" attrs="{'invisible': [('is_billed', '=', True)]}" class="btn-warning"/>
+                    <button name="action_unmark_billed" string="Desmarcar Facturado" type="object" attrs="{'invisible': [('is_billed', '=', False)]}" class="btn-secondary"/>
                     <field name="status" widget="statusbar"/>
                 </header>
                 <sheet>
@@ -38,8 +38,8 @@
                         <group string="Facturación">
                             <field name="billing_period"/>
                             <field name="is_billed" widget="boolean_toggle"/>
-                            <field name="invoice_id" invisible="not is_billed"/>
-                            <field name="billed_date" invisible="not is_billed"/>
+                            <field name="invoice_id" attrs="{'invisible': [('is_billed', '=', False)]}"/>
+                            <field name="billed_date" attrs="{'invisible': [('is_billed', '=', False)]}"/>
                         </group>
                     </group>
                     <notebook>
@@ -111,7 +111,7 @@
         <field name="arch" type="xml">
             <form string="Consumible">
                 <header>
-                    <button name="action_mark_as_replaced" string="Marcar como Reemplazado" type="object" class="btn-success" invisible="not needs_replacement"/>
+                    <button name="action_mark_as_replaced" string="Marcar como Reemplazado" type="object" class="btn-success" attrs="{'invisible': [('needs_replacement', '=', False)]}"/>
                     <field name="status" widget="statusbar"/>
                 </header>
                 <sheet>
@@ -183,11 +183,11 @@
                 <field name="alert_type"/>
                 <field name="severity" widget="badge" decoration-danger="severity == 'critical'" decoration-warning="severity == 'high'"/>
                 <field name="message"/>
-                <field name="acknowledged" column_invisible="1"/>
+                <field name="acknowledged" invisible="1"/>
                 <field name="resolved" widget="boolean_toggle"/>
                 <field name="age_days"/>
-                <button name="action_acknowledge" string="Reconocer" type="object" invisible="acknowledged" icon="fa-eye"/>
-                <button name="action_resolve" string="Resolver" type="object" invisible="resolved" icon="fa-check" class="text-success"/>
+                <button name="action_acknowledge" string="Reconocer" type="object" attrs="{'invisible': [('acknowledged', '=', True)]}" icon="fa-eye"/>
+                <button name="action_resolve" string="Resolver" type="object" attrs="{'invisible': [('resolved', '=', True)]}" icon="fa-check" class="text-success"/>
             </tree>
         </field>
     </record>
@@ -198,9 +198,9 @@
         <field name="arch" type="xml">
             <form string="Alerta">
                 <header>
-                    <button name="action_acknowledge" string="Reconocer" type="object" invisible="acknowledged" class="btn-info"/>
-                    <button name="action_resolve" string="Resolver" type="object" invisible="resolved" class="btn-success"/>
-                    <button name="action_unresolve" string="Reabrir" type="object" invisible="not resolved" class="btn-warning"/>
+                    <button name="action_acknowledge" string="Reconocer" type="object" attrs="{'invisible': [('acknowledged', '=', True)]}" class="btn-info"/>
+                    <button name="action_resolve" string="Resolver" type="object" attrs="{'invisible': [('resolved', '=', True)]}" class="btn-success"/>
+                    <button name="action_unresolve" string="Reabrir" type="object" attrs="{'invisible': [('resolved', '=', False)]}" class="btn-warning"/>
                 </header>
                 <sheet>
                     <div class="oe_title">
@@ -225,16 +225,16 @@
                     <group>
                         <group string="Reconocimiento">
                             <field name="acknowledged" widget="boolean_toggle"/>
-                            <field name="acknowledged_at" invisible="not acknowledged"/>
-                            <field name="acknowledged_by" invisible="not acknowledged"/>
+                            <field name="acknowledged_at" attrs="{'invisible': [('acknowledged', '=', False)]}"/>
+                            <field name="acknowledged_by" attrs="{'invisible': [('acknowledged', '=', False)]}"/>
                         </group>
                         <group string="Resolución">
                             <field name="resolved" widget="boolean_toggle"/>
-                            <field name="resolved_at" invisible="not resolved"/>
-                            <field name="resolved_by" invisible="not resolved"/>
+                            <field name="resolved_at" attrs="{'invisible': [('resolved', '=', False)]}"/>
+                            <field name="resolved_by" attrs="{'invisible': [('resolved', '=', False)]}"/>
                         </group>
                     </group>
-                    <group string="Notas de Resolución" invisible="not resolved">
+                    <group string="Notas de Resolución" attrs="{'invisible': [('resolved', '=', False)]}">
                         <field name="resolution_notes" nolabel="1" placeholder="Describa cómo se resolvió la alerta..."/>
                     </group>
                     <group string="Notas Adicionales">
