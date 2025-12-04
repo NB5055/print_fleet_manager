@@ -67,6 +67,7 @@ class PrinterConsumable(models.Model):
         ('lc', 'Light Cyan'),
         ('lm', 'Light Magenta'),
         ('tricolor', 'Tricolor'),
+        ('unknown', 'Desconocido'),
         ('other', 'Otro')
     ], string='Color')
 

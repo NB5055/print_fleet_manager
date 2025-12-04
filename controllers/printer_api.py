@@ -301,11 +301,25 @@ class PrinterAPIController(http.Controller):
     @validate_location_token
     def sync_readings(self, **kwargs):
         """
-        Endpoint para sincronizar lecturas de contadores con sistema dinámico de OIDs
+        Endpoint para sincronizar lecturas de contadores.
 
-        Solo se procesan lecturas de impresoras que pertenecen a la ubicación del token.
+        Soporta DOS formatos de payload:
 
-        Payload esperado:
+        Formato 1 - Campos directos (PrintServer legacy):
+        {
+            "readings": [
+                {
+                    "printer_ip": "10.0.0.14",
+                    "timestamp": "2025-10-13T10:30:00",
+                    "status": "online",
+                    "total_pages": 12345,
+                    "mono_pages": 10000,
+                    "color_pages": 2345
+                }
+            ]
+        }
+
+        Formato 2 - Con OIDs dinámicos:
         {
             "readings": [
                 {
@@ -313,15 +327,11 @@ class PrinterAPIController(http.Controller):
                     "timestamp": "2025-10-13T10:30:00",
                     "status": "online",
                     "counters": [
-                        {"oid": "1.3.6.1.2.1.43.10.2.1.4.1.1", "value": 12345},
-                        {"oid": "1.3.6.1.4.1.18334.1.1.1.5.7.2.2.1.5.1.1", "value": 10000},
-                        {"oid": "1.3.6.1.4.1.18334.1.1.1.5.7.2.2.1.5.1.2", "value": 2345}
+                        {"oid": "1.3.6.1.2.1.43.10.2.1.4.1.1", "value": 12345}
                     ]
                 }
             ]
         }
-
-        Nota: El campo 'counters' es requerido. Cada contador debe incluir 'oid' y 'value'.
         """
         try:
             data = json.loads(request.httprequest.data)
@@ -332,6 +342,17 @@ class PrinterAPIController(http.Controller):
             created = 0
             skipped = 0
             errors = []
+
+            # Mapeo de campos legacy a códigos de contador
+            LEGACY_COUNTER_MAP = {
+                'total_pages': ('total', 'Total de Páginas'),
+                'mono_pages': ('mono', 'Páginas Monocromáticas'),
+                'color_pages': ('color', 'Páginas a Color'),
+                'total_simplex': ('simplex', 'Total Simplex'),
+                'total_duplex': ('duplex', 'Total Duplex'),
+                'total_scans': ('scans', 'Total Escaneos'),
+                'total_copies': ('copies', 'Total Copias'),
+            }
 
             for reading_data in readings_data:
                 try:
@@ -355,12 +376,6 @@ class PrinterAPIController(http.Controller):
                         skipped += 1
                         continue
 
-                    # Validar que tenga contadores
-                    if 'counters' not in reading_data:
-                        errors.append(f"Lectura de {printer_ip} sin campo 'counters'")
-                        skipped += 1
-                        continue
-
                     # Crear lectura (solo timestamp y status)
                     reading_values = {
                         'printer_id': printer.id,
@@ -373,33 +388,61 @@ class PrinterAPIController(http.Controller):
                     # Procesar contadores
                     counters_to_create = []
 
-                    for counter_data in reading_data.get('counters', []):
-                        oid = counter_data.get('oid')
-                        value = counter_data.get('value', 0)
+                    # Formato 1: Campos legacy (total_pages, mono_pages, etc.)
+                    has_legacy_counters = False
+                    for field_name, (code, name) in LEGACY_COUNTER_MAP.items():
+                        if field_name in reading_data and reading_data[field_name] is not None:
+                            has_legacy_counters = True
+                            value = reading_data[field_name]
 
-                        if not oid:
-                            continue
+                            # Buscar o crear tipo de contador por código
+                            counter_type = request.env['counter.type'].sudo().search([
+                                ('code', '=', code)
+                            ], limit=1)
 
-                        # Buscar o crear tipo de contador por OID
-                        counter_type = request.env['counter.type'].sudo().search([
-                            ('oid', '=', oid)
-                        ], limit=1)
+                            if not counter_type:
+                                counter_type = request.env['counter.type'].sudo().create({
+                                    'name': name,
+                                    'code': code,
+                                    'oid': f'legacy.{code}',
+                                    'active': True,
+                                })
+                                _logger.info(f"Tipo de contador legacy creado: {code}")
 
-                        if not counter_type:
-                            # Crear tipo de contador automáticamente si no existe
-                            counter_type = request.env['counter.type'].sudo().create({
-                                'name': f'Contador {oid}',
-                                'code': f'auto_{oid.replace(".", "_")}',
-                                'oid': oid,
-                                'active': True,
+                            counters_to_create.append({
+                                'reading_id': reading.id,
+                                'counter_type_id': counter_type.id,
+                                'value': int(value) if value else 0,
                             })
-                            _logger.info(f"Tipo de contador creado automáticamente: {oid}")
 
-                        counters_to_create.append({
-                            'reading_id': reading.id,
-                            'counter_type_id': counter_type.id,
-                            'value': int(value) if value else 0,
-                        })
+                    # Formato 2: Con OIDs dinámicos
+                    if 'counters' in reading_data and not has_legacy_counters:
+                        for counter_data in reading_data.get('counters', []):
+                            oid = counter_data.get('oid')
+                            value = counter_data.get('value', 0)
+
+                            if not oid:
+                                continue
+
+                            # Buscar o crear tipo de contador por OID
+                            counter_type = request.env['counter.type'].sudo().search([
+                                ('oid', '=', oid)
+                            ], limit=1)
+
+                            if not counter_type:
+                                counter_type = request.env['counter.type'].sudo().create({
+                                    'name': f'Contador {oid}',
+                                    'code': f'auto_{oid.replace(".", "_")}',
+                                    'oid': oid,
+                                    'active': True,
+                                })
+                                _logger.info(f"Tipo de contador creado automáticamente: {oid}")
+
+                            counters_to_create.append({
+                                'reading_id': reading.id,
+                                'counter_type_id': counter_type.id,
+                                'value': int(value) if value else 0,
+                            })
 
                     # Crear todos los contadores de una vez
                     if counters_to_create:
