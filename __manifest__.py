@@ -78,9 +78,9 @@ Licencia: LGPL-3
         # Menús (al final para que todo esté definido)
         'views/printer_menus.xml',
 
-        # Datos adicionales (si existen)
+        # Datos adicionales
         # 'data/printer_data.xml',
-        # 'data/cron_jobs.xml',
+        'data/cron_jobs.xml',
 
         # Reportes (si existen)
         # 'reports/printer_reports.xml',

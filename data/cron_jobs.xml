@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Cron: Verificar niveles de consumibles y crear alertas (cada 4 horas) -->
+    <record id="cron_check_consumable_alerts" model="ir.cron">
+        <field name="name">Impresoras: Verificar alertas de consumibles</field>
+        <field name="model_id" ref="model_printer_consumable"/>
+        <field name="state">code</field>
+        <field name="code">model.check_and_create_alerts()</field>
+        <field name="interval_number">4</field>
+        <field name="interval_type">hours</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+        <field name="priority">10</field>
+    </record>
+
+    <!-- Cron: Auto-resolver alertas de offline cuando impresora vuelve en línea (cada hora) -->
+    <record id="cron_auto_resolve_offline_alerts" model="ir.cron">
+        <field name="name">Impresoras: Auto-resolver alertas de offline</field>
+        <field name="model_id" ref="model_printer_alert"/>
+        <field name="state">code</field>
+        <field name="code">model.auto_resolve_offline_alerts()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">hours</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+        <field name="priority">10</field>
+    </record>
+
+    <!-- Cron: Limpiar alertas resueltas antiguas (diario) -->
+    <record id="cron_cleanup_resolved_alerts" model="ir.cron">
+        <field name="name">Impresoras: Limpiar alertas resueltas antiguas</field>
+        <field name="model_id" ref="model_printer_alert"/>
+        <field name="state">code</field>
+        <field name="code">model.cleanup_old_resolved_alerts(days=90)</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+        <field name="priority">20</field>
+    </record>
+</odoo>

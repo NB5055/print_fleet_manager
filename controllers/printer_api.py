@@ -356,22 +356,33 @@ class PrinterAPIController(http.Controller):
 
             for reading_data in readings_data:
                 try:
-                    # Identificar impresora por IP (debe pertenecer a esta ubicación)
                     printer_ip = reading_data.get('printer_ip')
-                    if not printer_ip:
-                        errors.append("Lectura sin printer_ip")
+                    printer_serial = reading_data.get('printer_serial')
+
+                    if not printer_ip and not printer_serial:
+                        errors.append("Lectura sin printer_ip ni printer_serial")
                         skipped += 1
                         continue
 
-                    # Buscar impresora en ESTA ubicación
-                    printer = request.env['printer.device'].sudo().search([
-                        ('location_id', '=', location.id),
-                        ('ip_address', '=', printer_ip)
-                    ], limit=1)
+                    # Identificar impresora: serial primero (robusto ante DHCP), IP como fallback
+                    printer = None
+
+                    if printer_serial:
+                        printer = request.env['printer.device'].sudo().search([
+                            ('location_id', '=', location.id),
+                            ('serial_number', '=', printer_serial)
+                        ], limit=1)
+
+                    if not printer and printer_ip:
+                        printer = request.env['printer.device'].sudo().search([
+                            ('location_id', '=', location.id),
+                            ('ip_address', '=', printer_ip)
+                        ], limit=1)
 
                     if not printer:
+                        identifier = printer_serial or printer_ip
                         _logger.warning(
-                            f"Impresora {printer_ip} no encontrada en ubicación {location.name}"
+                            f"Impresora '{identifier}' no encontrada en ubicación {location.name}"
                         )
                         skipped += 1
                         continue

@@ -362,10 +362,12 @@ class PrinterBillingReview(models.Model):
         # Crear la factura
         invoice = self.env['account.move'].create(invoice_vals)
 
-        # Marcar lecturas como facturadas si corresponde
+        # Marcar lecturas como facturadas: solo las de impresoras incluidas en esta revisión
         if self.only_not_billed:
+            # Tomar únicamente las impresoras que fueron efectivamente facturadas
+            billed_printer_ids = lines_to_bill.mapped('printer_id').ids
             readings_to_mark = self.env['printer.reading'].search([
-                ('partner_id', '=', self.partner_id.id),
+                ('printer_id', 'in', billed_printer_ids),
                 ('timestamp', '>=', self.date_from),
                 ('timestamp', '<=', self.date_to),
                 ('is_billed', '=', False)
@@ -375,6 +377,10 @@ class PrinterBillingReview(models.Model):
                 'invoice_id': invoice.id,
                 'billed_date': fields.Datetime.now()
             })
+            _logger.info(
+                f"Marcadas {len(readings_to_mark)} lecturas como facturadas "
+                f"para {len(billed_printer_ids)} impresoras"
+            )
 
         # Actualizar revisión
         self.write({
