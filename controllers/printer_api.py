@@ -197,7 +197,7 @@ class PrinterAPIController(http.Controller):
         }
         """
         try:
-            data = json.loads(request.httprequest.data)
+            data = request.jsonrequest
             printers_data = data.get('printers', [])
 
             # Obtener ubicación desde el decorador
@@ -334,7 +334,7 @@ class PrinterAPIController(http.Controller):
         }
         """
         try:
-            data = json.loads(request.httprequest.data)
+            data = request.jsonrequest
             readings_data = data.get('readings', [])
 
             location = request.printer_location
@@ -376,12 +376,23 @@ class PrinterAPIController(http.Controller):
                         skipped += 1
                         continue
 
-                    # Crear lectura (solo timestamp y status)
+                    # Crear lectura (idempotente: si ya existe para este timestamp, saltar)
                     reading_values = {
                         'printer_id': printer.id,
                         'timestamp': parse_timestamp(reading_data.get('timestamp')),
                         'status': reading_data.get('status', 'unknown'),
                     }
+
+                    existing_reading = request.env['printer.reading'].sudo()._find_duplicate_reading(
+                        printer.id, reading_values['timestamp']
+                    )
+                    if existing_reading:
+                        _logger.debug(
+                            f"Lectura duplicada omitida para {printer.name} "
+                            f"en {reading_values['timestamp']} (reintento de sync)"
+                        )
+                        skipped += 1
+                        continue
 
                     reading = request.env['printer.reading'].sudo().create(reading_values)
 
@@ -507,7 +518,7 @@ class PrinterAPIController(http.Controller):
         }
         """
         try:
-            data = json.loads(request.httprequest.data)
+            data = request.jsonrequest
             consumables_data = data.get('consumables', [])
 
             location = request.printer_location
@@ -618,7 +629,7 @@ class PrinterAPIController(http.Controller):
         }
         """
         try:
-            data = json.loads(request.httprequest.data)
+            data = request.jsonrequest
             alerts_data = data.get('alerts', [])
 
             location = request.printer_location

@@ -130,21 +130,18 @@ class PrinterReading(models.Model):
             else:
                 record.billing_period = False
 
-    @api.constrains('timestamp', 'printer_id')
-    def _check_timestamp_order(self):
-        """Valida que no haya timestamps duplicados para la misma impresora"""
-        for record in self:
-            if record.printer_id and record.timestamp:
-                existing = self.search([
-                    ('printer_id', '=', record.printer_id.id),
-                    ('timestamp', '=', record.timestamp),
-                    ('id', '!=', record.id)
-                ])
-                if existing:
-                    raise ValidationError(
-                        f"Ya existe una lectura para {record.printer_id.name} "
-                        f"en {record.timestamp}"
-                    )
+    def _find_duplicate_reading(self, printer_id, timestamp):
+        """
+        Busca una lectura existente para el mismo printer y timestamp.
+        Usado por el controlador API para lógica upsert (idempotencia en reintentos).
+
+        Returns:
+            Recordset con la lectura existente, o vacío si no hay duplicado.
+        """
+        return self.search([
+            ('printer_id', '=', printer_id),
+            ('timestamp', '=', timestamp),
+        ], limit=1)
 
     def action_mark_as_billed(self):
         """Marca la lectura como facturada"""
