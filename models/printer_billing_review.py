@@ -4,7 +4,7 @@ Revisión de Facturación de Impresoras (PERSISTENTE)
 Guarda historial completo de revisiones y facturación
 """
 
-from odoo import models, fields, api
+from odoo import Command, models, fields, api
 from odoo.exceptions import UserError
 import logging
 
@@ -153,12 +153,13 @@ class PrinterBillingReview(models.Model):
         copy=False
     )
 
-    @api.model
-    def create(self, vals):
+    @api.model_create_multi
+    def create(self, vals_list):
         """Genera secuencia automática para el nombre"""
-        if vals.get('name', 'Nuevo') == 'Nuevo':
-            vals['name'] = self.env['ir.sequence'].next_by_code('printer.billing.review') or 'Nuevo'
-        return super(PrinterBillingReview, self).create(vals)
+        for vals in vals_list:
+            if vals.get('name', 'Nuevo') == 'Nuevo':
+                vals['name'] = self.env['ir.sequence'].next_by_code('printer.billing.review') or 'Nuevo'
+        return super().create(vals_list)
 
     @api.depends('line_ids', 'line_ids.total_pages', 'line_ids.estimated_amount', 'line_ids.include_in_invoice')
     def _compute_totals(self):
@@ -327,7 +328,7 @@ class PrinterBillingReview(models.Model):
                 description += f"Impresoras: {', '.join(data['printers'])}\n"
                 description += f"Revisión: {self.name}"
 
-                invoice_vals['invoice_line_ids'].append((0, 0, {
+                invoice_vals['invoice_line_ids'].append(Command.create({
                     'name': description,
                     'quantity': 1,  # Cantidad 1, el precio ya incluye todo
                     'price_unit': data['total_amount'],
@@ -353,7 +354,7 @@ class PrinterBillingReview(models.Model):
                 if line.notes:
                     description += f"\nNotas: {line.notes}"
 
-                invoice_vals['invoice_line_ids'].append((0, 0, {
+                invoice_vals['invoice_line_ids'].append(Command.create({
                     'name': description,
                     'quantity': 1,  # Cantidad 1, el precio ya incluye todo
                     'price_unit': line.estimated_amount,

@@ -12,7 +12,7 @@
                 <button name="action_view_counter_prices"
                         type="object"
                         class="oe_stat_button"
-                        icon="fa-dollar">
+                        icon="attach_money">
                     <field name="counter_prices_count" widget="statinfo" string="Precios"/>
                 </button>
             </xpath>
@@ -27,14 +27,14 @@
                         </p>
                     </group>
                     <field name="counter_price_ids">
-                        <tree editable="bottom">
+                        <list editable="bottom">
                             <field name="counter_type_id" options="{'no_create': True}"/>
                             <field name="counter_name" readonly="1"/>
                             <field name="counter_code" readonly="1" optional="show"/>
                             <field name="counter_oid" readonly="1" optional="hide"/>
                             <field name="unit_price" string="Precio"/>
                             <field name="notes" optional="hide"/>
-                        </tree>
+                        </list>
                     </field>
                 </page>
             </xpath>

@@ -15,7 +15,6 @@ class PrinterReadingCounter(models.Model):
     _name = 'printer.reading.counter'
     _description = 'Valor de Contador en Lectura'
     _order = 'reading_id, counter_type_id'
-    _rec_name = 'display_name'
 
     # Relaciones
     reading_id = fields.Many2one(
@@ -76,18 +75,11 @@ class PrinterReadingCounter(models.Model):
         index=True
     )
 
-    # Display name computado
-    display_name = fields.Char(
-        compute='_compute_display_name',
-        string='Descripción'
-    )
-
     # Constraint SQL para evitar duplicados
-    _sql_constraints = [
-        ('reading_counter_unique',
-         'UNIQUE(reading_id, counter_type_id)',
-         'No puede haber dos valores del mismo tipo de contador en una lectura')
-    ]
+    _reading_counter_unique = models.Constraint(
+        'UNIQUE(reading_id, counter_type_id)',
+        'No puede haber dos valores del mismo tipo de contador en una lectura',
+    )
 
     @api.depends('counter_name', 'value', 'oid')
     def _compute_display_name(self):

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Print Fleet Manager',
-    'version': '1.0.0',
+    'version': '20.0.1.0.0',
     'category': 'Services/Management',
     'summary': 'Gestión y monitoreo centralizado de flotas de impresoras con facturación por uso',
     'description': """
@@ -55,7 +55,7 @@ Licencia: LGPL-3
     'data': [
         # Seguridad
         'security/printer_security.xml',
-        'security/ir.model.access.csv',
+        'security/ir.access.csv',
 
         # Datos iniciales (secuencias y tipos de contadores)
         'data/printer_sequences.xml',
@@ -72,7 +72,6 @@ Licencia: LGPL-3
 
         # Wizards (antes de los menús)
         'wizards/printer_billing_wizard_views.xml',
-        # 'wizards/printer_billing_review_wizard_views.xml',  # Ya no se usa - reemplazado por modelo persistente
         'wizards/token_display_wizard_views.xml',
 
         # Menús (al final para que todo esté definido)
@@ -101,15 +100,4 @@ Licencia: LGPL-3
     'installable': True,
     'application': True,
     'auto_install': False,
-
-    # Versión de Odoo compatible
-    'version': '17.0.1.0.0',
-
-    # Imágenes
-    'images': ['static/description/icon.png'],
-
-    # Configuración adicional
-    'external_dependencies': {
-        'python': ['requests', 'cryptography'],
-    },
 }

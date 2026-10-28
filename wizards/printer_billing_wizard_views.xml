@@ -17,7 +17,7 @@
                         <field name="only_not_billed"/>
                     </group>
                 </group>
-                <group string="Previsualización" attrs="{'invisible': [('partner_id', '=', False)]}">
+                <group string="Previsualización" invisible="not partner_id">
                     <group>
                         <field name="total_printers" readonly="1"/>
                         <field name="total_pages" readonly="1"/>
@@ -46,7 +46,7 @@
     <record id="action_printer_usage_report" model="ir.actions.act_window">
         <field name="name">Reporte de Uso</field>
         <field name="res_model">printer.reading</field>
-        <field name="view_mode">pivot,graph,tree</field>
+        <field name="view_mode">pivot,graph,list</field>
         <field name="context">{
             'search_default_group_partner': 1,
             'search_default_group_period': 1,

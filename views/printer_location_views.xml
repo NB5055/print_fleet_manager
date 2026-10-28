@@ -5,7 +5,7 @@
         <field name="name">printer.location.tree</field>
         <field name="model">printer.location</field>
         <field name="arch" type="xml">
-            <tree string="Ubicaciones de Impresoras" decoration-muted="not is_active">
+            <list string="Ubicaciones de Impresoras" decoration-muted="not is_active">
                 <field name="name"/>
                 <field name="partner_id"/>
                 <field name="printer_count"/>
@@ -14,8 +14,8 @@
                 <field name="token_active" widget="boolean_toggle"/>
                 <field name="last_sync"/>
                 <field name="sync_status" decoration-success="sync_status == 'success'" decoration-danger="sync_status == 'error'"/>
-                <field name="is_active" invisible="1"/>
-            </tree>
+                <field name="is_active" column_invisible="1"/>
+            </list>
         </field>
     </record>
 
@@ -34,47 +34,39 @@
                 <field name="last_sync"/>
                 <field name="sync_status"/>
                 <templates>
-                    <t t-name="kanban-box">
-                        <div class="oe_kanban_global_click">
-                            <div class="o_kanban_record_top">
-                                <div class="o_kanban_record_headings">
-                                    <strong class="o_kanban_record_title"><field name="name"/></strong>
-                                    <div class="o_kanban_record_subtitle">
-                                        <i class="fa fa-building-o"/> <field name="partner_id"/>
-                                    </div>
-                                </div>
-                                <span t-if="record.token_active.raw_value" class="badge badge-success">Token Activo</span>
-                                <span t-else="" class="badge badge-danger">Token Inactivo</span>
-                            </div>
-                            <div class="o_kanban_record_body">
-                                <div class="row">
-                                    <div class="col-6">
-                                        <i class="fa fa-print"/> <field name="printer_count"/> impresoras
-                                    </div>
-                                    <div class="col-6">
-                                        <i class="fa fa-file-o"/> <field name="total_pages_month"/> pág/mes
-                                    </div>
-                                </div>
-                                <div class="row mt-2">
-                                    <div class="col-12">
-                                        <i class="fa fa-clock-o"/> <field name="last_sync" widget="relative"/>
-                                    </div>
+                    <t t-name="card">
+                        <div class="d-flex align-items-start">
+                            <div class="flex-grow-1">
+                                <field name="name" class="fw-bold fs-5"/>
+                                <div class="text-muted">
+                                    <i class="oi" data-icon="business" title="Cliente"/> <field name="partner_id"/>
                                 </div>
                             </div>
-                            <div class="o_kanban_record_bottom">
-                                <div class="oe_kanban_bottom_left">
-                                    <span t-if="record.sync_status.raw_value == 'success'" class="badge badge-pill badge-success">
-                                        <i class="fa fa-check"/> Sincronizado
-                                    </span>
-                                    <span t-elif="record.sync_status.raw_value == 'error'" class="badge badge-pill badge-danger">
-                                        <i class="fa fa-exclamation-triangle"/> Error
-                                    </span>
-                                    <span t-else="" class="badge badge-pill badge-secondary">
-                                        <i class="fa fa-question"/> Sin sincronizar
-                                    </span>
-                                </div>
+                            <span t-if="record.token_active.raw_value" class="badge text-bg-success">Token Activo</span>
+                            <span t-else="" class="badge text-bg-danger">Token Inactivo</span>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-6">
+                                <i class="oi" data-icon="print" title="Impresoras"/> <field name="printer_count"/> impresoras
+                            </div>
+                            <div class="col-6">
+                                <i class="oi" data-icon="description" title="Páginas"/> <field name="total_pages_month"/> pág/mes
                             </div>
                         </div>
+                        <div class="mt-2">
+                            <i class="oi" data-icon="schedule" title="Fecha"/> <field name="last_sync" widget="relative"/>
+                        </div>
+                        <footer>
+                            <span t-if="record.sync_status.raw_value == 'success'" class="badge rounded-pill text-bg-success">
+                                <i class="oi" data-icon="check" title="Sincronizado"/> Sincronizado
+                            </span>
+                            <span t-elif="record.sync_status.raw_value == 'error'" class="badge rounded-pill text-bg-danger">
+                                <i class="oi" data-icon="warning" title="Advertencia"/> Error
+                            </span>
+                            <span t-else="" class="badge rounded-pill text-bg-secondary">
+                                <i class="oi" data-icon="help" title="Desconocido"/> Sin sincronizar
+                            </span>
+                        </footer>
                     </t>
                 </templates>
             </kanban>
@@ -88,26 +80,26 @@
         <field name="arch" type="xml">
             <form string="Ubicación de Impresoras">
                 <header>
-                    <button name="action_generate_token" string="Generar Nuevo Token" type="object" class="oe_highlight" attrs="{'invisible': [('access_token', '!=', False)]}"/>
-                    <button name="action_generate_token" string="Regenerar Token" type="object" confirm="¿Está seguro de regenerar el token? El token actual dejará de funcionar."/>
-                    <button name="action_activate_token" string="Activar Token" type="object" attrs="{'invisible': [('token_active', '=', True)]}" class="btn-success"/>
-                    <button name="action_deactivate_token" string="Desactivar Token" type="object" attrs="{'invisible': [('token_active', '=', False)]}" class="btn-warning" confirm="¿Está seguro de desactivar el token? El PrintServer no podrá enviar datos."/>
+                    <button name="action_generate_token" string="Generar Nuevo Token" type="object" class="oe_highlight" invisible="access_token" groups="print_fleet_manager.group_printer_manager"/>
+                    <button name="action_generate_token" string="Regenerar Token" type="object" invisible="not access_token" groups="print_fleet_manager.group_printer_manager" confirm="¿Está seguro de regenerar el token? El token actual dejará de funcionar."/>
+                    <button name="action_activate_token" string="Activar Token" type="object" invisible="token_active" class="btn-success" groups="print_fleet_manager.group_printer_manager"/>
+                    <button name="action_deactivate_token" string="Desactivar Token" type="object" invisible="not token_active" class="btn-warning" groups="print_fleet_manager.group_printer_manager" confirm="¿Está seguro de desactivar el token? El PrintServer no podrá enviar datos."/>
                     <button name="action_view_printers" string="Ver Impresoras" type="object" class="btn-primary"/>
                     <field name="sync_status" widget="statusbar" statusbar_visible="never,success,error"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
-                        <button name="action_view_printers" type="object" class="oe_stat_button" icon="fa-print">
+                        <button name="action_view_printers" type="object" class="oe_stat_button" icon="print">
                             <field name="printer_count" widget="statinfo" string="Impresoras"/>
                         </button>
-                        <button name="action_view_usage_report" type="object" class="oe_stat_button" icon="fa-file-text-o">
+                        <button name="action_view_usage_report" type="object" class="oe_stat_button" icon="description">
                             <div class="o_field_widget o_stat_info">
                                 <span class="o_stat_value"><field name="total_pages_month"/></span>
                                 <span class="o_stat_text">Páginas Este Mes</span>
                             </div>
                         </button>
                     </div>
-                    <widget name="web_ribbon" title="Inactiva" bg_color="bg-danger" attrs="{'invisible': [('is_active', '=', True)]}"/>
+                    <widget name="web_ribbon" title="Inactiva" bg_color="text-bg-danger" invisible="is_active"/>
                     <div class="oe_title">
                         <h1>
                             <field name="name" placeholder="ej: Oficina Central, Sucursal Norte..."/>
@@ -130,10 +122,10 @@
                     </group>
 
                     <notebook>
-                        <page string="Token de Acceso" name="token">
+                        <page string="Token de Acceso" name="token" groups="print_fleet_manager.group_printer_manager">
                             <group>
                                 <group string="Configuración del Token">
-                                    <field name="access_token" password="True" attrs="{'invisible': [('access_token', '=', False)]}"/>
+                                    <field name="access_token" password="True" invisible="not access_token"/>
                                     <field name="token_active" widget="boolean_toggle"/>
                                     <field name="token_created_date"/>
                                     <field name="token_last_used"/>
@@ -157,16 +149,16 @@
                         </page>
 
                         <page string="Impresoras" name="printers">
-                            <field name="printer_ids" context="{'default_location_id': active_id}">
-                                <tree decoration-muted="not is_active">
+                            <field name="printer_ids" context="{'default_location_id': id}">
+                                <list decoration-muted="not is_active">
                                     <field name="name"/>
                                     <field name="ip_address"/>
                                     <field name="model"/>
                                     <field name="status"/>
                                     <field name="total_pages"/>
                                     <field name="last_reading"/>
-                                    <field name="is_active" invisible="1"/>
-                                </tree>
+                                    <field name="is_active" column_invisible="1"/>
+                                </list>
                             </field>
                         </page>
 
@@ -195,10 +187,7 @@
                         </page>
                     </notebook>
                 </sheet>
-                <div class="oe_chatter">
-                    <field name="message_follower_ids"/>
-                    <field name="message_ids"/>
-                </div>
+                <chatter/>
             </form>
         </field>
     </record>
@@ -221,7 +210,7 @@
                 <filter string="Sincronización OK" name="sync_success" domain="[('sync_status', '=', 'success')]"/>
                 <filter string="Error de Sincronización" name="sync_error" domain="[('sync_status', '=', 'error')]"/>
                 <filter string="Sin Sincronizar" name="sync_never" domain="[('sync_status', '=', 'never')]"/>
-                <group expand="0" string="Agrupar Por">
+                <group>
                     <filter string="Cliente" name="group_partner" context="{'group_by': 'partner_id'}"/>
                     <filter string="Estado" name="group_sync_status" context="{'group_by': 'sync_status'}"/>
                     <filter string="Ciudad" name="group_city" context="{'group_by': 'city'}"/>
@@ -234,7 +223,7 @@
     <record id="action_printer_location" model="ir.actions.act_window">
         <field name="name">Ubicaciones</field>
         <field name="res_model">printer.location</field>
-        <field name="view_mode">kanban,tree,form</field>
+        <field name="view_mode">kanban,list,form</field>
         <field name="context">{'search_default_active': 1, 'search_default_token_active': 1}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">

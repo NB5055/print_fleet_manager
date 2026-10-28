@@ -15,7 +15,6 @@ class PrinterBillingReviewCounter(models.Model):
     _name = 'printer.billing.review.counter'
     _description = 'Contador en Línea de Revisión de Facturación'
     _order = 'review_line_id, counter_type_id'
-    _rec_name = 'display_name'
 
     # Relaciones
     review_line_id = fields.Many2one(
@@ -41,7 +40,7 @@ class PrinterBillingReviewCounter(models.Model):
         readonly=True
     )
     printer_name = fields.Char(
-        string='Impresora',
+        string='Nombre de Impresora',
         related='review_line_id.printer_name',
         store=True,
         readonly=True
@@ -125,18 +124,11 @@ class PrinterBillingReviewCounter(models.Model):
         readonly=True
     )
 
-    # Display name computado
-    display_name = fields.Char(
-        compute='_compute_display_name',
-        string='Descripción'
-    )
-
     # Constraint SQL para evitar duplicados
-    _sql_constraints = [
-        ('review_line_counter_unique',
-         'UNIQUE(review_line_id, counter_type_id)',
-         'No puede haber dos contadores del mismo tipo en una línea de revisión')
-    ]
+    _review_line_counter_unique = models.Constraint(
+        'UNIQUE(review_line_id, counter_type_id)',
+        'No puede haber dos contadores del mismo tipo en una línea de revisión',
+    )
 
     @api.depends('counter_name', 'total_pages', 'subtotal')
     def _compute_display_name(self):

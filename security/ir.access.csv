@@ -1,0 +1,25 @@
+id,name,model_id,group_id/id,operation,domain
+access_printer_location_user,printer.location.user,printer.location,print_fleet_manager.group_printer_user,r,"[('partner_id.user_id', '=', user.id)]"
+access_printer_location_manager,printer.location.manager,printer.location,print_fleet_manager.group_printer_manager,crud,
+access_printer_device_user,printer.device.user,printer.device,print_fleet_manager.group_printer_user,r,"[('partner_id.user_id', '=', user.id)]"
+access_printer_device_manager,printer.device.manager,printer.device,print_fleet_manager.group_printer_manager,crud,
+access_printer_reading_user,printer.reading.user,printer.reading,print_fleet_manager.group_printer_user,r,"[('partner_id.user_id', '=', user.id)]"
+access_printer_reading_manager,printer.reading.manager,printer.reading,print_fleet_manager.group_printer_manager,crud,
+access_printer_consumable_user,printer.consumable.user,printer.consumable,print_fleet_manager.group_printer_user,r,"[('printer_id.partner_id.user_id', '=', user.id)]"
+access_printer_consumable_manager,printer.consumable.manager,printer.consumable,print_fleet_manager.group_printer_manager,crud,
+access_printer_alert_user,printer.alert.user,printer.alert,print_fleet_manager.group_printer_user,r,"[('printer_id.partner_id.user_id', '=', user.id)]"
+access_printer_alert_manager,printer.alert.manager,printer.alert,print_fleet_manager.group_printer_manager,crud,
+access_printer_reading_counter_user,printer.reading.counter.user,printer.reading.counter,print_fleet_manager.group_printer_user,r,
+access_printer_reading_counter_manager,printer.reading.counter.manager,printer.reading.counter,print_fleet_manager.group_printer_manager,crud,
+access_counter_type_user,counter.type.user,counter.type,print_fleet_manager.group_printer_user,r,
+access_counter_type_manager,counter.type.manager,counter.type,print_fleet_manager.group_printer_manager,crud,
+access_partner_counter_price_user,partner.counter.price.user,partner.counter.price,print_fleet_manager.group_printer_user,r,
+access_partner_counter_price_manager,partner.counter.price.manager,partner.counter.price,print_fleet_manager.group_printer_manager,crud,
+access_printer_billing_review_user,printer.billing.review.user,printer.billing.review,print_fleet_manager.group_printer_user,r,
+access_printer_billing_review_manager,printer.billing.review.manager,printer.billing.review,print_fleet_manager.group_printer_manager,crud,
+access_printer_billing_review_line_user,printer.billing.review.line.user,printer.billing.review.line,print_fleet_manager.group_printer_user,r,
+access_printer_billing_review_line_manager,printer.billing.review.line.manager,printer.billing.review.line,print_fleet_manager.group_printer_manager,crud,
+access_printer_billing_review_counter_user,printer.billing.review.counter.user,printer.billing.review.counter,print_fleet_manager.group_printer_user,r,
+access_printer_billing_review_counter_manager,printer.billing.review.counter.manager,printer.billing.review.counter,print_fleet_manager.group_printer_manager,crud,
+access_printer_billing_wizard_manager,printer.billing.wizard.manager,printer.billing.wizard,print_fleet_manager.group_printer_manager,crud,
+access_token_display_wizard_manager,token.display.wizard.manager,token.display.wizard,print_fleet_manager.group_printer_manager,crud,

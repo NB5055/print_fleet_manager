@@ -5,7 +5,7 @@
         <field name="name">partner.counter.price.tree</field>
         <field name="model">partner.counter.price</field>
         <field name="arch" type="xml">
-            <tree string="Precios por Cliente" editable="bottom">
+            <list string="Precios por Cliente" editable="bottom">
                 <field name="partner_id" options="{'no_create': True}"/>
                 <field name="counter_type_id" options="{'no_create': True}"/>
                 <field name="counter_name" readonly="1"/>
@@ -13,7 +13,7 @@
                 <field name="counter_oid" readonly="1" optional="hide"/>
                 <field name="unit_price" string="Precio"/>
                 <field name="notes" optional="hide"/>
-            </tree>
+            </list>
         </field>
     </record>
 
@@ -73,7 +73,7 @@
                 <separator/>
 
                 <!-- Agrupaciones -->
-                <group expand="0" string="Agrupar Por">
+                <group>
                     <filter name="group_by_partner"
                             string="Cliente"
                             context="{'group_by': 'partner_id'}"/>
@@ -89,7 +89,7 @@
     <record id="action_partner_counter_price" model="ir.actions.act_window">
         <field name="name">Precios por Cliente</field>
         <field name="res_model">partner.counter.price</field>
-        <field name="view_mode">tree,form</field>
+        <field name="view_mode">list,form</field>
         <field name="context">{'search_default_group_by_partner': 1}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">

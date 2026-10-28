@@ -29,7 +29,7 @@ class TokenDisplayWizard(models.TransientModel):
     def _compute_token_url(self):
         """Calcula la URL base de Odoo para mostrar en las instrucciones"""
         for wizard in self:
-            base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url')
+            base_url = self.env['ir.config_parameter'].sudo().get_str('web.base.url')
             wizard.token_url = base_url or 'http://localhost:8069'
 
     def action_copy_instructions(self):

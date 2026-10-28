@@ -165,14 +165,14 @@ class Printer(models.Model):
     )
 
     # Restricciones SQL
-    _sql_constraints = [
-        ('unique_serial_per_location',
-         'UNIQUE(location_id, serial_number)',
-         'Ya existe una impresora con este número de serie en esta ubicación'),
-        ('unique_ip_per_location',
-         'UNIQUE(location_id, ip_address)',
-         'Ya existe una impresora con esta IP en esta ubicación'),
-    ]
+    _unique_serial_per_location = models.Constraint(
+        'UNIQUE(location_id, serial_number)',
+        'Ya existe una impresora con este número de serie en esta ubicación',
+    )
+    _unique_ip_per_location = models.Constraint(
+        'UNIQUE(location_id, ip_address)',
+        'Ya existe una impresora con esta IP en esta ubicación',
+    )
 
     @api.depends('model', 'serial_number', 'ip_address', 'location_id')
     def _compute_name(self):
@@ -231,7 +231,7 @@ class Printer(models.Model):
             'type': 'ir.actions.act_window',
             'name': f'Lecturas - {self.name}',
             'res_model': 'printer.reading',
-            'view_mode': 'tree,form,graph',
+            'view_mode': 'list,form,graph',
             'domain': [('printer_id', '=', self.id)],
             'context': {'default_printer_id': self.id}
         }
@@ -243,7 +243,7 @@ class Printer(models.Model):
             'type': 'ir.actions.act_window',
             'name': f'Consumibles - {self.name}',
             'res_model': 'printer.consumable',
-            'view_mode': 'tree,form',
+            'view_mode': 'list,form',
             'domain': [('printer_id', '=', self.id)],
             'context': {'default_printer_id': self.id}
         }
@@ -255,7 +255,7 @@ class Printer(models.Model):
             'type': 'ir.actions.act_window',
             'name': f'Alertas - {self.name}',
             'res_model': 'printer.alert',
-            'view_mode': 'tree,form',
+            'view_mode': 'list,form',
             'domain': [('printer_id', '=', self.id)],
             'context': {'default_printer_id': self.id}
         }

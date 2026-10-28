@@ -2,14 +2,20 @@
 """
 Tests para el controlador REST de PrintServer (printer_api.py):
   - Autenticación por token (X-Location-Token)
-  - Endpoint /api/printserver/sync (sync_all)
+  - Rutas /api/printer/* (HttpCase)
   - Deduplicación de lecturas
   - Helpers: parse_timestamp, normalize_severity
 """
 
-from odoo.tests.common import TransactionCase, HttpCase
-from odoo.exceptions import ValidationError
+import hashlib
+import json
 from datetime import datetime
+
+from psycopg2 import IntegrityError
+
+from odoo.exceptions import ValidationError
+from odoo.tests import HttpCase, TransactionCase, tagged
+from odoo.tools import mute_logger
 
 
 class TestPrinterApiHelpers(TransactionCase):
@@ -76,6 +82,7 @@ class TestPrinterApiHelpers(TransactionCase):
         normalize_severity = self._get_normalize_severity()
         self.assertEqual(normalize_severity('critical'), 'critical')
 
+    @mute_logger('odoo.addons.print_fleet_manager.controllers.printer_api')
     def test_normalize_severity_unknown_defaults_medium(self):
         """Un valor desconocido debe devolver 'medium'."""
         normalize_severity = self._get_normalize_severity()
@@ -174,19 +181,229 @@ class TestPrinterApiSyncReadings(TransactionCase):
         ])
         self.assertEqual(count, 1)
 
+    def test_serial_unique_per_location(self):
+        """No puede haber dos impresoras con el mismo serial en una ubicación."""
+        with self.assertRaises(IntegrityError), mute_logger('odoo.sql_db'):
+            self.env['printer.device'].create({
+                'name': 'Printer con IP cambiada',
+                'ip_address': '10.0.1.99',
+                'location_id': self.location.id,
+                'serial_number': 'SN-SYNC-001',  # Mismo serial que self.printer
+            })
+
     def test_serial_first_printer_lookup(self):
-        """La búsqueda por serial_number tiene prioridad sobre IP."""
-        # Crear otra impresora con mismo serial pero distinta IP
-        printer2 = self.env['printer.device'].create({
-            'name': 'Printer con IP cambiada',
-            'ip_address': '10.0.1.99',
+        """La búsqueda por serial_number encuentra la impresora aunque cambie su IP."""
+        # Otra impresora en la IP "nueva" de la primera (DHCP)
+        self.env['printer.device'].create({
+            'name': 'Otra impresora',
+            'ip_address': '10.0.1.2',
             'location_id': self.location.id,
-            'serial_number': 'SN-SYNC-001',  # Mismo serial que self.printer
+            'serial_number': 'SN-SYNC-002',
         })
-        # Buscar por serial → debe retornar alguno de los dos (el primero)
         found_by_serial = self.env['printer.device'].sudo().search([
             ('location_id', '=', self.location.id),
             ('serial_number', '=', 'SN-SYNC-001'),
         ], limit=1)
-        self.assertTrue(found_by_serial)
-        self.assertEqual(found_by_serial.serial_number, 'SN-SYNC-001')
+        self.assertEqual(found_by_serial, self.printer)
+
+
+class TestLocationTokenLookup(TransactionCase):
+    """Búsqueda de ubicación por token (huella + comparación en tiempo constante)."""
+
+    def setUp(self):
+        super().setUp()
+        self.partner = self.env['res.partner'].create({'name': 'Cliente Hash Test'})
+        self.location = self.env['printer.location'].create({
+            'name': 'Ubicación Hash Test',
+            'partner_id': self.partner.id,
+        })
+
+    def test_token_generated_and_hashed(self):
+        token = self.location.access_token
+        self.assertTrue(token)
+        self.assertEqual(self.location.access_token_hash, hashlib.sha256(token.encode()).hexdigest())
+
+    def test_lookup_by_token(self):
+        Location = self.env['printer.location']
+        self.assertEqual(Location._get_by_access_token(self.location.access_token), self.location)
+        self.assertFalse(Location._get_by_access_token(self.location.access_token + 'x'))
+        self.assertFalse(Location._get_by_access_token(''))
+        self.assertFalse(Location._get_by_access_token(None))
+
+    def test_lookup_inactive_location(self):
+        Location = self.env['printer.location']
+        self.location.is_active = False
+        self.assertFalse(Location._get_by_access_token(self.location.access_token))
+        self.assertEqual(
+            Location._get_by_access_token(self.location.access_token, active_only=False),
+            self.location,
+        )
+
+    def test_regenerate_token_invalidates_old(self):
+        old_token = self.location.access_token
+        self.location.action_generate_token()
+        self.assertNotEqual(self.location.access_token, old_token)
+        Location = self.env['printer.location']
+        self.assertFalse(Location._get_by_access_token(old_token))
+        self.assertEqual(Location._get_by_access_token(self.location.access_token), self.location)
+
+    def test_duplicate_token_rejected(self):
+        with self.assertRaises(ValidationError):
+            self.env['printer.location'].create({
+                'name': 'Otra ubicación',
+                'partner_id': self.partner.id,
+                'access_token': self.location.access_token,
+            })
+
+
+@tagged('post_install', '-at_install')
+class TestPrinterApiHttp(HttpCase):
+    """Smoke test de las rutas HTTP/JSON del PrintServer."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.partner = cls.env['res.partner'].create({'name': 'Cliente HTTP Test'})
+        cls.location = cls.env['printer.location'].create({
+            'name': 'Ubicación HTTP Test',
+            'partner_id': cls.partner.id,
+            'access_token': 'http-token-0123456789abcdef',
+        })
+        cls.token = 'http-token-0123456789abcdef'
+
+    def _post(self, route, payload, token=None):
+        headers = {'Content-Type': 'application/json'}
+        if token:
+            headers['X-Location-Token'] = token
+        self.env.flush_all()
+        response = self.url_open(route, data=json.dumps(payload), headers=headers)
+        self.env.invalidate_all()
+        return response
+
+    def _result(self, response):
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertNotIn('error', body, body)
+        return body['result']
+
+    def test_health(self):
+        response = self.url_open('/api/printer/health')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'ok')
+
+    @mute_logger('odoo.addons.print_fleet_manager.controllers.printer_api')
+    def test_sync_requires_token(self):
+        response = self._post('/api/printer/sync/printers', {'printers': []})
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()['status'], 'error')
+
+    def test_sync_rejects_invalid_token(self):
+        with self.assertLogs('odoo.addons.print_fleet_manager.controllers.printer_api', 'WARNING') as logs:
+            response = self._post('/api/printer/sync/printers', {'printers': []}, token='bad-token-ABCDEFGHIJ')
+        self.assertEqual(response.status_code, 403)
+        # El token (ni un prefijo) no debe aparecer en el log
+        self.assertFalse(any('bad-token' in line for line in logs.output), logs.output)
+
+    @mute_logger('odoo.addons.print_fleet_manager.controllers.printer_api')
+    def test_sync_rejects_deactivated_token(self):
+        self.location.token_active = False
+        response = self._post('/api/printer/sync/printers', {'printers': []}, token=self.token)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()['error'], 'Token desactivado')
+
+    @mute_logger('odoo.addons.print_fleet_manager.controllers.printer_api')
+    def test_location_info(self):
+        self.env.flush_all()
+        response = self.url_open('/api/printer/location/info', headers={'X-Location-Token': self.token})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['location']['id'], self.location.id)
+        response = self.url_open('/api/printer/location/info', headers={'X-Location-Token': 'nope'})
+        self.assertEqual(response.status_code, 403)
+        response = self.url_open('/api/printer/location/info')
+        self.assertEqual(response.status_code, 401)
+
+    @mute_logger('odoo.sql_db', 'odoo.addons.print_fleet_manager.controllers.printer_api')
+    def test_full_sync_flow(self):
+        # 1) Impresoras (cuerpo JSON plano, como lo envía PrintServer)
+        result = self._result(self._post('/api/printer/sync/printers', {
+            'printers': [
+                {'ip_address': '10.9.0.1', 'serial_number': 'SN-HTTP-1', 'model': 'EPSON WF-6590',
+                 'manufacturer': 'EPSON', 'status': 'online'},
+                {'ip_address': '10.9.0.2', 'serial_number': 'SN-HTTP-2', 'model': 'HP M404'},
+                {'serial_number': 'SIN-IP'},
+            ],
+            'sync_timestamp': '2026-10-27T10:00:00',
+        }, token=self.token))
+        self.assertEqual(result['created'], 2)
+        self.assertEqual(result['status'], 'partial_success')
+        printer = self.env['printer.device'].search([('serial_number', '=', 'SN-HTTP-1')])
+        self.assertEqual(printer.location_id, self.location)
+        self.assertEqual(self.location.token_requests_count, 1)
+
+        # Re-sincronizar: la impresora 2 cambió de IP y choca con la 1 -> error
+        # aislado (savepoint) sin abortar el lote
+        result = self._result(self._post('/api/printer/sync/printers', {
+            'printers': [
+                {'ip_address': '10.9.0.1', 'serial_number': 'SN-HTTP-2'},
+                {'ip_address': '10.9.0.1', 'serial_number': 'SN-HTTP-1', 'model': 'EPSON WF-6590 v2'},
+            ],
+        }, token=self.token))
+        self.assertEqual(result['updated'], 1)
+        self.assertEqual(len(result['errors']), 1)
+        self.assertEqual(printer.model, 'EPSON WF-6590 v2')
+
+        # 2) Lecturas: formato legacy y formato OID; la repetida se omite
+        payload = {'readings': [
+            {'printer_serial': 'SN-HTTP-1', 'timestamp': '2026-10-01T08:00:00.123456',
+             'status': 'online', 'total_pages': 1000, 'mono_pages': 800, 'color_pages': 200},
+            {'printer_ip': '10.9.0.2', 'timestamp': '2026-10-01T08:00:00', 'status': 'online',
+             'counters': [{'oid': '1.3.6.1.2.1.43.10.2.1.4.1.1', 'value': 500},
+                          {'oid': '1.3.6.1.4.1.99999.1', 'value': 7}]},
+            {'printer_ip': '10.9.9.9', 'timestamp': '2026-10-01T08:00:00'},
+        ]}
+        result = self._result(self._post('/api/printer/sync/readings', payload, token=self.token))
+        self.assertEqual(result['created'], 2)
+        self.assertEqual(result['skipped'], 1)
+        self.assertEqual(printer.total_pages, 1000)
+        self.assertEqual(printer.color_pages, 200)
+        self.assertTrue(self.env['counter.type'].search([('oid', '=', '1.3.6.1.4.1.99999.1')]))
+        result = self._result(self._post('/api/printer/sync/readings', payload, token=self.token))
+        self.assertEqual(result['created'], 0)
+        self.assertEqual(result['skipped'], 3)
+
+        # 3) Consumibles
+        result = self._result(self._post('/api/printer/sync/consumables', {'consumables': [
+            {'printer_ip': '10.9.0.1', 'supply_name': 'Toner Negro', 'supply_type': 'toner',
+             'color': 'black', 'level_percent': 8.0},
+        ]}, token=self.token))
+        self.assertEqual(result['created'], 1)
+        result = self._result(self._post('/api/printer/sync/consumables', {'consumables': [
+            {'printer_ip': '10.9.0.1', 'supply_name': 'Toner Negro', 'level_percent': 5.0},
+        ]}, token=self.token))
+        self.assertEqual(result['updated'], 1)
+        consumable = printer.consumable_ids
+        self.assertEqual(consumable.status, 'critical')
+        self.assertTrue(consumable.needs_replacement)
+        self.assertIn(consumable, self.env['printer.consumable'].search([('needs_replacement', '=', True)]))
+
+        # 4) Alertas (con deduplicación)
+        alert_payload = {'alerts': [
+            {'printer_ip': '10.9.0.1', 'alert_type': 'paper_jam', 'severity': 'error',
+             'message': 'Atasco bandeja 1', 'timestamp': '2026-10-27T09:00:00'},
+        ]}
+        result = self._result(self._post('/api/printer/sync/alerts', alert_payload, token=self.token))
+        self.assertEqual(result['created'], 1)
+        result = self._result(self._post('/api/printer/sync/alerts', alert_payload, token=self.token))
+        self.assertEqual(result['duplicates'], 1)
+        alert = printer.alert_ids
+        self.assertEqual(alert.severity, 'high')
+        self.assertIn(alert, self.env['printer.alert'].search([('is_active', '=', True)]))
+        self.assertNotIn(alert, self.env['printer.alert'].search([('is_active', '=', False)]))
+
+    def test_jsonrpc_envelope_accepted(self):
+        """Un cliente que envíe el sobre JSON-RPC también funciona."""
+        result = self._result(self._post('/api/printer/sync/printers', {
+            'jsonrpc': '2.0', 'method': 'call',
+            'params': {'printers': [{'ip_address': '10.9.1.1', 'serial_number': 'SN-RPC-1'}]},
+        }, token=self.token))
+        self.assertEqual(result['created'], 1)

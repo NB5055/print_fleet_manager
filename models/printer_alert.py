@@ -16,7 +16,7 @@ class PrinterAlert(models.Model):
     _name = 'printer.alert'
     _description = 'Alerta de Impresora'
     _order = 'timestamp desc, severity desc'
-    _rec_name = 'display_name'
+    _rec_names_search = ['message', 'printer_id']
 
     # Relaciones
     printer_id = fields.Many2one(
@@ -132,10 +132,6 @@ class PrinterAlert(models.Model):
     )
 
     # Campos Computados
-    display_name = fields.Char(
-        string='Nombre',
-        compute='_compute_display_name'
-    )
     age_days = fields.Integer(
         string='Antigüedad (días)',
         compute='_compute_age',
@@ -148,21 +144,31 @@ class PrinterAlert(models.Model):
         help='Alerta no resuelta'
     )
 
-    @api.depends('printer_id', 'alert_type', 'timestamp', 'severity')
+    def _get_alert_label(self):
+        """Nombre descriptivo de la alerta (sin iconos)"""
+        self.ensure_one()
+        alert_type_label = dict(self._fields['alert_type'].selection).get(self.alert_type, '')
+        severity_label = dict(self._fields['severity'].selection).get(self.severity, '')
+        parts = [
+            f"[{severity_label.upper()}]" if severity_label else "",
+            alert_type_label,
+            f"- {self.printer_id.name}" if self.printer_id else "",
+            f"({self.timestamp.strftime('%Y-%m-%d %H:%M')})" if self.timestamp else ""
+        ]
+        return ' '.join(filter(None, parts)) or 'Alerta Sin Nombre'
+
+    @api.depends('printer_id.name', 'alert_type', 'timestamp', 'severity', 'resolved')
     def _compute_display_name(self):
-        """Genera nombre descriptivo"""
+        """Personaliza el nombre mostrado"""
         for record in self:
-            alert_type_label = dict(record._fields['alert_type'].selection).get(record.alert_type, '')
-            severity_label = dict(record._fields['severity'].selection).get(record.severity, '')
-
-            parts = [
-                f"[{severity_label.upper()}]" if severity_label else "",
-                alert_type_label,
-                f"- {record.printer_id.name}" if record.printer_id else "",
-                f"({record.timestamp.strftime('%Y-%m-%d %H:%M')})" if record.timestamp else ""
-            ]
-
-            record.display_name = ' '.join(filter(None, parts)) or 'Alerta Sin Nombre'
+            severity_icon = {
+                'low': '🔵',
+                'medium': '🟡',
+                'high': '🟠',
+                'critical': '🔴'
+            }.get(record.severity, '⚪')
+            status = "✓" if record.resolved else "⚠"
+            record.display_name = f"{severity_icon} {status} {record._get_alert_label()}"
 
     @api.depends('timestamp')
     def _compute_age(self):
@@ -182,14 +188,10 @@ class PrinterAlert(models.Model):
             record.is_active = not record.resolved
 
     def _search_is_active(self, operator, value):
-        """Permite buscar alertas activas"""
-        if operator == '=' and value:
-            return [('resolved', '=', False)]
-        elif operator == '=' and not value:
-            return [('resolved', '=', True)]
-        elif operator == '!=':
-            return [('resolved', '=', value)]
-        return []
+        """Permite buscar alertas activas (is_active == not resolved)"""
+        if operator not in ('in', 'not in'):
+            return NotImplemented
+        return [('resolved', operator, [not bool(v) for v in value])]
 
     def action_acknowledge(self):
         """Reconoce la alerta (marca como vista)"""
@@ -199,7 +201,7 @@ class PrinterAlert(models.Model):
             'acknowledged_at': fields.Datetime.now(),
             'acknowledged_by': self.env.user.id
         })
-        _logger.info(f"Alerta reconocida: {self.display_name} por {self.env.user.name}")
+        _logger.info(f"Alerta reconocida: {self._get_alert_label()} por {self.env.user.name}")
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
@@ -219,7 +221,7 @@ class PrinterAlert(models.Model):
             'resolved_at': fields.Datetime.now(),
             'resolved_by': self.env.user.id
         })
-        _logger.info(f"Alerta resuelta: {self.display_name} por {self.env.user.name}")
+        _logger.info(f"Alerta resuelta: {self._get_alert_label()} por {self.env.user.name}")
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
@@ -240,7 +242,7 @@ class PrinterAlert(models.Model):
             'resolved_by': False,
             'resolution_notes': False
         })
-        _logger.info(f"Alerta reabierta: {self.display_name} por {self.env.user.name}")
+        _logger.info(f"Alerta reabierta: {self._get_alert_label()} por {self.env.user.name}")
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
@@ -334,19 +336,3 @@ class PrinterAlert(models.Model):
                     f"Alerta de tipo '{record.alert_type}' con severidad 'low'. "
                     "Considere usar una severidad mayor."
                 )
-
-    def name_get(self):
-        """Personaliza el nombre mostrado"""
-        result = []
-        for record in self:
-            severity_icon = {
-                'low': '🔵',
-                'medium': '🟡',
-                'high': '🟠',
-                'critical': '🔴'
-            }.get(record.severity, '⚪')
-
-            status = "✓" if record.resolved else "⚠"
-            name = f"{severity_icon} {status} {record.display_name}"
-            result.append((record.id, name))
-        return result

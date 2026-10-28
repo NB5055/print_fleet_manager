@@ -15,7 +15,7 @@ class PrinterReading(models.Model):
     _name = 'printer.reading'
     _description = 'Lectura de Contadores de Impresora'
     _order = 'timestamp desc'
-    _rec_name = 'display_name'
+    _rec_names_search = ['printer_id']
 
     # Relaciones
     printer_id = fields.Many2one(
@@ -106,20 +106,14 @@ class PrinterReading(models.Model):
         readonly=True
     )
 
-    # Campos Computados para Análisis
-    display_name = fields.Char(
-        string='Nombre',
-        compute='_compute_display_name'
-    )
-
-    @api.depends('printer_id', 'timestamp')
+    @api.depends('printer_id.name', 'timestamp', 'counter_ids')
     def _compute_display_name(self):
-        """Genera nombre descriptivo"""
+        """Personaliza el nombre mostrado"""
         for record in self:
-            if record.printer_id and record.timestamp:
-                record.display_name = f"{record.printer_id.name} - {record.timestamp.strftime('%Y-%m-%d %H:%M')}"
-            else:
-                record.display_name = f"Lectura #{record.id or 'Nueva'}"
+            name = f"{record.printer_id.name if record.printer_id else 'Sin Impresora'} - "
+            name += f"{record.timestamp.strftime('%Y-%m-%d %H:%M') if record.timestamp else 'Sin Fecha'}"
+            name += f" ({len(record.counter_ids)} contadores)"
+            record.display_name = name
 
     @api.depends('timestamp')
     def _compute_billing_period(self):
@@ -312,16 +306,6 @@ class PrinterReading(models.Model):
                 })
 
         return usage_by_printer
-
-    def name_get(self):
-        """Personaliza el nombre mostrado"""
-        result = []
-        for record in self:
-            name = f"{record.printer_id.name if record.printer_id else 'Sin Impresora'} - "
-            name += f"{record.timestamp.strftime('%Y-%m-%d %H:%M') if record.timestamp else 'Sin Fecha'}"
-            name += f" ({len(record.counter_ids)} contadores)"
-            result.append((record.id, name))
-        return result
 
     def get_counter_value(self, oid_or_code):
         """

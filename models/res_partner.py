@@ -36,7 +36,7 @@ class ResPartner(models.Model):
             'name': f'Precios de {self.name}',
             'type': 'ir.actions.act_window',
             'res_model': 'partner.counter.price',
-            'view_mode': 'tree,form',
+            'view_mode': 'list,form',
             'domain': [('partner_id', '=', self.id)],
             'context': {
                 'default_partner_id': self.id,

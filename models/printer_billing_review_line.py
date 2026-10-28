@@ -54,7 +54,7 @@ class PrinterBillingReviewLine(models.Model):
         readonly=True
     )
     location_name = fields.Char(
-        string='Ubicación',
+        string='Nombre de Ubicación',
         related='printer_id.location_id.name',
         store=True,
         readonly=True
@@ -122,14 +122,13 @@ class PrinterBillingReviewLine(models.Model):
             else:
                 line.estimated_amount = 0
 
-    def name_get(self):
+    @api.depends('printer_name', 'total_pages')
+    def _compute_display_name(self):
         """Personaliza el nombre mostrado"""
-        result = []
         for record in self:
             name = f"{record.printer_name or 'Sin Impresora'}"
             if record.total_pages > 0:
                 name += f" ({record.total_pages:,} páginas)"
             else:
                 name += " (0 páginas)"
-            result.append((record.id, name))
-        return result
+            record.display_name = name

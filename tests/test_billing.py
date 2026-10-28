@@ -7,9 +7,11 @@ Tests para el workflow de facturación de impresoras:
   - Campos computados: state, name, total_printers
 """
 
-from odoo.tests.common import TransactionCase
+from datetime import date, datetime
+
+from odoo.addons.account.tests.common import AccountTestInvoicingCommon
 from odoo.exceptions import UserError
-from datetime import datetime, date
+from odoo.tests import TransactionCase, tagged
 
 
 class TestBillingWorkflow(TransactionCase):
@@ -177,3 +179,98 @@ class TestBillingReadingMarking(TransactionCase):
 
         self.assertTrue(reading1.is_billed)
         self.assertFalse(reading2.is_billed)
+
+
+@tagged('post_install', '-at_install')
+class TestBillingInvoice(AccountTestInvoicingCommon):
+    """Flujo completo: lecturas → wizard → revisión → factura (account.move)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.env.user.group_ids |= cls.env.ref('print_fleet_manager.group_printer_manager')
+        cls.customer = cls.env['res.partner'].create({'name': 'Cliente Factura Test'})
+        cls.location = cls.env['printer.location'].create({
+            'name': 'Oficina Factura Test',
+            'partner_id': cls.customer.id,
+        })
+        cls.printer = cls.env['printer.device'].create({
+            'ip_address': '10.0.4.1',
+            'serial_number': 'SN-INV-1',
+            'model': 'EPSON',
+            'location_id': cls.location.id,
+        })
+        cls.ct_mono = cls.env.ref('print_fleet_manager.counter_type_mono')
+        cls.ct_color = cls.env.ref('print_fleet_manager.counter_type_color')
+        cls.env['partner.counter.price'].create([
+            {'partner_id': cls.customer.id, 'counter_type_id': cls.ct_mono.id, 'unit_price': 0.05},
+            {'partner_id': cls.customer.id, 'counter_type_id': cls.ct_color.id, 'unit_price': 0.20},
+        ])
+        # Lectura anterior al período + dos dentro (la última, el último día por la tarde)
+        for ts, mono, color in [
+            (datetime(2025, 12, 31, 9, 0), 1000, 100),
+            (datetime(2026, 1, 10, 9, 0), 1500, 150),
+            (datetime(2026, 1, 31, 18, 0), 2000, 300),
+        ]:
+            reading = cls.env['printer.reading'].create({
+                'printer_id': cls.printer.id, 'timestamp': ts, 'status': 'online',
+            })
+            cls.env['printer.reading.counter'].create([
+                {'reading_id': reading.id, 'counter_type_id': cls.ct_mono.id, 'value': mono},
+                {'reading_id': reading.id, 'counter_type_id': cls.ct_color.id, 'value': color},
+            ])
+
+    def _create_review(self, group_by_location):
+        wizard = self.env['printer.billing.wizard'].create({
+            'partner_id': self.customer.id,
+            'date_from': date(2026, 1, 1),
+            'date_to': date(2026, 1, 31),
+            'group_by_location': group_by_location,
+        })
+        self.assertEqual(wizard.total_pages, 1000 + 200)
+        action = wizard.action_generate_invoice()
+        return self.env['printer.billing.review'].browse(action['res_id'])
+
+    def test_review_and_invoice_per_printer(self):
+        review = self._create_review(group_by_location=False)
+        self.assertEqual(review.state, 'draft')
+        self.assertTrue(review.name.startswith('REV/'))
+        self.assertEqual(review.total_printers, 1)
+        self.assertEqual(review.total_pages_all, 1200)
+        self.assertAlmostEqual(review.total_amount, 1000 * 0.05 + 200 * 0.20)
+        self.assertIn('Páginas Monocromáticas', review.totals_by_counter_type)
+
+        review.action_confirm()
+        self.assertEqual(review.state, 'confirmed')
+        action = review.action_generate_invoice()
+        invoice = self.env['account.move'].browse(action['res_id'])
+        self.assertEqual(review.state, 'invoiced')
+        self.assertEqual(review.invoice_id, invoice)
+        self.assertEqual(invoice.move_type, 'out_invoice')
+        self.assertEqual(invoice.partner_id, self.customer)
+        self.assertEqual(len(invoice.invoice_line_ids), 1)
+        self.assertAlmostEqual(invoice.amount_untaxed, 90.0)
+        invoice.action_post()
+        self.assertEqual(invoice.state, 'posted')
+
+        # Se marcan las lecturas del período (incluida la del último día), no la anterior
+        readings = self.env['printer.reading'].search([('printer_id', '=', self.printer.id)])
+        billed = readings.filtered('is_billed')
+        self.assertEqual(len(billed), 2)
+        self.assertTrue(all(r.invoice_id == invoice for r in billed))
+        with self.assertRaises(UserError):
+            review.action_cancel()
+
+    def test_invoice_grouped_by_location(self):
+        review = self._create_review(group_by_location=True)
+        action = review.action_generate_invoice()
+        invoice = self.env['account.move'].browse(action['res_id'])
+        self.assertEqual(len(invoice.invoice_line_ids), 1)
+        self.assertIn(self.location.name, invoice.invoice_line_ids.name)
+        self.assertAlmostEqual(invoice.amount_untaxed, 90.0)
+
+    def test_recalculate_review(self):
+        review = self._create_review(group_by_location=False)
+        review.counter_ids[:1].counter_end += 10
+        review.action_recalculate_all()
+        self.assertEqual(review.total_pages_all, 1200)

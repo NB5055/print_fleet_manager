@@ -14,7 +14,7 @@ _logger = logging.getLogger(__name__)
 class PartnerCounterPrice(models.Model):
     _name = 'partner.counter.price'
     _description = 'Precio de Contador por Cliente'
-    _rec_name = 'display_name'
+    _rec_names_search = ['partner_id', 'counter_type_id']
     _order = 'partner_id, counter_type_id'
 
     # Relaciones
@@ -57,16 +57,9 @@ class PartnerCounterPrice(models.Model):
         readonly=True
     )
     partner_name = fields.Char(
-        string='Cliente',
+        string='Nombre del Cliente',
         related='partner_id.name',
         readonly=True
-    )
-
-    # Display name computado
-    display_name = fields.Char(
-        compute='_compute_display_name',
-        string='Descripción',
-        store=True
     )
 
     # Notas
@@ -76,20 +69,23 @@ class PartnerCounterPrice(models.Model):
     )
 
     # Constraint SQL para evitar duplicados
-    _sql_constraints = [
-        ('partner_counter_unique',
-         'UNIQUE(partner_id, counter_type_id)',
-         'Ya existe un precio configurado para este cliente y tipo de contador')
-    ]
+    _partner_counter_unique = models.Constraint(
+        'UNIQUE(partner_id, counter_type_id)',
+        'Ya existe un precio configurado para este cliente y tipo de contador',
+    )
 
-    @api.depends('partner_id', 'partner_name', 'counter_type_id', 'counter_name', 'unit_price')
+    @api.depends('partner_name', 'counter_name', 'counter_code', 'unit_price')
     def _compute_display_name(self):
-        """Genera nombre descriptivo"""
+        """Muestra información completa en selects"""
         for record in self:
-            if record.partner_name and record.counter_name:
-                record.display_name = f"{record.partner_name} - {record.counter_name}: ${record.unit_price:.4f}"
-            else:
+            if not (record.partner_name and record.counter_name):
                 record.display_name = f"Precio #{record.id or 'Nuevo'}"
+                continue
+            name = f"{record.partner_name} - {record.counter_name}"
+            if record.counter_code:
+                name += f" [{record.counter_code}]"
+            name += f": ${record.unit_price:.4f}"
+            record.display_name = name
 
     @api.constrains('unit_price')
     def _check_unit_price(self):
@@ -143,14 +139,3 @@ class PartnerCounterPrice(models.Model):
         """
         prices = self.search([('partner_id', '=', partner_id)])
         return {price.counter_type_id.id: price.unit_price for price in prices}
-
-    def name_get(self):
-        """Muestra información completa en selects"""
-        result = []
-        for record in self:
-            name = f"{record.partner_name} - {record.counter_name}"
-            if record.counter_code:
-                name += f" [{record.counter_code}]"
-            name += f": ${record.unit_price:.4f}"
-            result.append((record.id, name))
-        return result

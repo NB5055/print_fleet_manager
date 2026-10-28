@@ -7,7 +7,7 @@ Tests para printer.reading:
   - Marcado como facturado
 """
 
-from odoo.tests.common import TransactionCase
+from odoo.tests import TransactionCase
 from odoo.exceptions import ValidationError
 from datetime import datetime
 

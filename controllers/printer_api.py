@@ -6,10 +6,11 @@ Validación de token por ubicación y endpoints de sincronización
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from odoo import http, fields
 from odoo.http import request, Response
 from functools import wraps
+from werkzeug.exceptions import abort
 
 _logger = logging.getLogger(__name__)
 
@@ -81,6 +82,17 @@ def normalize_severity(severity_str):
     return normalized
 
 
+def _json_error_response(status, payload):
+    return Response(json.dumps(payload), status=status, mimetype='application/json')
+
+
+def _remote_addr():
+    try:
+        return request.httprequest.remote_addr or 'desconocida'
+    except Exception:  # noqa: BLE001
+        return 'desconocida'
+
+
 def validate_location_token(func):
     """
     Decorador para validar Location Token en peticiones
@@ -88,6 +100,10 @@ def validate_location_token(func):
     El token debe enviarse en el header 'X-Location-Token'
     Este token es único por ubicación y permite enviar datos
     de todas las impresoras de esa ubicación
+
+    Si la autenticación falla se corta la petición con un HTTP 401/403 y
+    cuerpo JSON (abort + Response, para no envolverlo en JSON-RPC).
+    El token nunca se escribe en el log, ni siquiera parcialmente.
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -95,47 +111,33 @@ def validate_location_token(func):
         location_token = request.httprequest.headers.get('X-Location-Token')
 
         if not location_token:
-            _logger.warning("Intento de acceso sin token de ubicación")
-            return Response(
-                json.dumps({
-                    'status': 'error',
-                    'error': 'Location Token requerido',
-                    'message': 'Debe proporcionar el token de ubicación en el header X-Location-Token'
-                }),
-                status=401,
-                mimetype='application/json'
-            )
+            _logger.warning("Intento de acceso sin token de ubicación desde %s", _remote_addr())
+            abort(_json_error_response(401, {
+                'status': 'error',
+                'error': 'Location Token requerido',
+                'message': 'Debe proporcionar el token de ubicación en el header X-Location-Token'
+            }))
 
-        # Buscar ubicación con este token
-        location = request.env['printer.location'].sudo().search([
-            ('access_token', '=', location_token),
-            ('is_active', '=', True)
-        ], limit=1)
+        # Buscar ubicación activa con este token (búsqueda por huella +
+        # comparación en tiempo constante)
+        location = request.env['printer.location'].sudo()._get_by_access_token(location_token)
 
         if not location:
-            _logger.warning(f"Intento de acceso con token inválido: {location_token[:10]}...")
-            return Response(
-                json.dumps({
-                    'status': 'error',
-                    'error': 'Token inválido o inactivo',
-                    'message': 'El token de ubicación no es válido o ha sido desactivado'
-                }),
-                status=403,
-                mimetype='application/json'
-            )
+            _logger.warning("Intento de acceso con token inválido desde %s", _remote_addr())
+            abort(_json_error_response(403, {
+                'status': 'error',
+                'error': 'Token inválido o inactivo',
+                'message': 'El token de ubicación no es válido o ha sido desactivado'
+            }))
 
         # Verificar que el token esté activo
         if not location.token_active:
-            _logger.warning(f"Intento de acceso con token desactivado para: {location.name}")
-            return Response(
-                json.dumps({
-                    'status': 'error',
-                    'error': 'Token desactivado',
-                    'message': f'El token para la ubicación "{location.name}" ha sido desactivado'
-                }),
-                status=403,
-                mimetype='application/json'
-            )
+            _logger.warning("Intento de acceso con token desactivado para: %s", location.name)
+            abort(_json_error_response(403, {
+                'status': 'error',
+                'error': 'Token desactivado',
+                'message': f'El token para la ubicación "{location.name}" ha sido desactivado'
+            }))
 
         # Actualizar estadísticas de uso del token
         location.update_token_usage()
@@ -154,12 +156,27 @@ def validate_location_token(func):
     return wrapper
 
 
+def _get_payload(kwargs):
+    """
+    Devuelve el cuerpo JSON de la petición.
+
+    PrintServer envía el JSON "plano" ({"printers": [...]}), sin sobre
+    JSON-RPC; en ese caso Odoo no rellena ``kwargs`` y se lee el cuerpo
+    completo. Si un cliente envía el sobre JSON-RPC ({"params": {...}}),
+    los datos llegan en ``kwargs``.
+    """
+    if kwargs:
+        return kwargs
+    data = request.get_json_data()
+    return data if isinstance(data, dict) else {}
+
+
 class PrinterAPIController(http.Controller):
     """
     Controlador de API REST para PrintServer
     """
 
-    @http.route('/api/printer/sync/printers', type='json', auth='none', methods=['POST'], csrf=False)
+    @http.route('/api/printer/sync/printers', type='jsonrpc', auth='none', methods=['POST'], csrf=False, readonly=False)
     @validate_location_token
     def sync_printers(self, **kwargs):
         """
@@ -197,7 +214,7 @@ class PrinterAPIController(http.Controller):
         }
         """
         try:
-            data = request.jsonrequest
+            data = _get_payload(kwargs)
             printers_data = data.get('printers', [])
 
             # Obtener ubicación desde el decorador
@@ -209,58 +226,63 @@ class PrinterAPIController(http.Controller):
 
             for printer_data in printers_data:
                 try:
-                    ip_address = printer_data.get('ip_address')
-                    mac_address = printer_data.get('mac_address')
-                    serial_number = printer_data.get('serial_number')
+                    # Savepoint por elemento: un error (p.ej. de una restricción SQL)
+                    # no debe abortar la transacción del resto del lote.
+                    with request.env.cr.savepoint():
+                        ip_address = printer_data.get('ip_address')
+                        mac_address = printer_data.get('mac_address')
+                        serial_number = printer_data.get('serial_number')
 
-                    if not ip_address:
-                        errors.append(f"Impresora sin IP address: {printer_data}")
-                        continue
+                        if not ip_address:
+                            errors.append(f"Impresora sin IP address: {printer_data}")
+                            continue
 
-                    # Buscar impresora existente en ESTA ubicación
-                    # Prioridad: 1) MAC address, 2) Serial number, 3) IP address
-                    printer = None
+                        # Buscar impresora existente en ESTA ubicación
+                        # Prioridad: 1) MAC address, 2) Serial number, 3) IP address
+                        printer = None
 
-                    # Intento 1: Buscar por MAC address (más confiable)
-                    if mac_address:
-                        printer = request.env['printer.device'].sudo().search([
-                            ('location_id', '=', location.id),
-                            ('mac_address', '=', mac_address)
-                        ], limit=1)
+                        # Intento 1: Buscar por MAC address (más confiable)
+                        if mac_address:
+                            printer = request.env['printer.device'].sudo().search([
+                                ('location_id', '=', location.id),
+                                ('mac_address', '=', mac_address)
+                            ], limit=1)
 
-                    # Intento 2: Si no se encontró por MAC, buscar por serial number
-                    if not printer and serial_number:
-                        printer = request.env['printer.device'].sudo().search([
-                            ('location_id', '=', location.id),
-                            ('serial_number', '=', serial_number)
-                        ], limit=1)
+                        # Intento 2: Si no se encontró por MAC, buscar por serial number
+                        if not printer and serial_number:
+                            printer = request.env['printer.device'].sudo().search([
+                                ('location_id', '=', location.id),
+                                ('serial_number', '=', serial_number)
+                            ], limit=1)
 
-                    # Intento 3: Si no se encontró por MAC ni serial, buscar por IP (fallback)
-                    if not printer:
-                        printer = request.env['printer.device'].sudo().search([
-                            ('location_id', '=', location.id),
-                            ('ip_address', '=', ip_address)
-                        ], limit=1)
+                        # Intento 3: Si no se encontró por MAC ni serial, buscar por IP (fallback)
+                        if not printer:
+                            printer = request.env['printer.device'].sudo().search([
+                                ('location_id', '=', location.id),
+                                ('ip_address', '=', ip_address)
+                            ], limit=1)
 
-                    # Preparar valores
-                    values = self._prepare_printer_values(printer_data, location)
+                        # Preparar valores
+                        values = self._prepare_printer_values(printer_data, location)
 
-                    if printer:
-                        # Actualizar impresora existente
-                        printer.write(values)
-                        updated += 1
-                        _logger.info(
-                            f"Impresora actualizada: {printer.name} "
-                            f"({printer.ip_address}) en {location.name}"
-                        )
-                    else:
-                        # Crear nueva impresora
-                        new_printer = request.env['printer.device'].sudo().create(values)
-                        created += 1
-                        _logger.info(
-                            f"Impresora creada: {new_printer.name} "
-                            f"({new_printer.ip_address}) en {location.name}"
-                        )
+                        if printer:
+                            # Actualizar impresora existente
+                            printer.write(values)
+                            request.env.flush_all()  # que un error SQL salte dentro del savepoint
+                            updated += 1
+                            _logger.info(
+                                f"Impresora actualizada: {printer.name} "
+                                f"({printer.ip_address}) en {location.name}"
+                            )
+                        else:
+                            # Crear nueva impresora
+                            new_printer = request.env['printer.device'].sudo().create(values)
+                            request.env.flush_all()  # que un error SQL salte dentro del savepoint
+                            created += 1
+                            _logger.info(
+                                f"Impresora creada: {new_printer.name} "
+                                f"({new_printer.ip_address}) en {location.name}"
+                            )
 
                 except Exception as e:
                     error_msg = f"Error procesando impresora {printer_data.get('ip_address', 'unknown')}: {str(e)}"
@@ -297,7 +319,7 @@ class PrinterAPIController(http.Controller):
                 'message': str(e)
             }
 
-    @http.route('/api/printer/sync/readings', type='json', auth='none', methods=['POST'], csrf=False)
+    @http.route('/api/printer/sync/readings', type='jsonrpc', auth='none', methods=['POST'], csrf=False, readonly=False)
     @validate_location_token
     def sync_readings(self, **kwargs):
         """
@@ -334,7 +356,7 @@ class PrinterAPIController(http.Controller):
         }
         """
         try:
-            data = request.jsonrequest
+            data = _get_payload(kwargs)
             readings_data = data.get('readings', [])
 
             location = request.printer_location
@@ -356,127 +378,131 @@ class PrinterAPIController(http.Controller):
 
             for reading_data in readings_data:
                 try:
-                    printer_ip = reading_data.get('printer_ip')
-                    printer_serial = reading_data.get('printer_serial')
+                    # Savepoint por elemento: un error (p.ej. de una restricción SQL)
+                    # no debe abortar la transacción del resto del lote.
+                    with request.env.cr.savepoint():
+                        printer_ip = reading_data.get('printer_ip')
+                        printer_serial = reading_data.get('printer_serial')
 
-                    if not printer_ip and not printer_serial:
-                        errors.append("Lectura sin printer_ip ni printer_serial")
-                        skipped += 1
-                        continue
+                        if not printer_ip and not printer_serial:
+                            errors.append("Lectura sin printer_ip ni printer_serial")
+                            skipped += 1
+                            continue
 
-                    # Identificar impresora: serial primero (robusto ante DHCP), IP como fallback
-                    printer = None
+                        # Identificar impresora: serial primero (robusto ante DHCP), IP como fallback
+                        printer = None
 
-                    if printer_serial:
-                        printer = request.env['printer.device'].sudo().search([
-                            ('location_id', '=', location.id),
-                            ('serial_number', '=', printer_serial)
-                        ], limit=1)
-
-                    if not printer and printer_ip:
-                        printer = request.env['printer.device'].sudo().search([
-                            ('location_id', '=', location.id),
-                            ('ip_address', '=', printer_ip)
-                        ], limit=1)
-
-                    if not printer:
-                        identifier = printer_serial or printer_ip
-                        _logger.warning(
-                            f"Impresora '{identifier}' no encontrada en ubicación {location.name}"
-                        )
-                        skipped += 1
-                        continue
-
-                    # Crear lectura (idempotente: si ya existe para este timestamp, saltar)
-                    reading_values = {
-                        'printer_id': printer.id,
-                        'timestamp': parse_timestamp(reading_data.get('timestamp')),
-                        'status': reading_data.get('status', 'unknown'),
-                    }
-
-                    existing_reading = request.env['printer.reading'].sudo()._find_duplicate_reading(
-                        printer.id, reading_values['timestamp']
-                    )
-                    if existing_reading:
-                        _logger.debug(
-                            f"Lectura duplicada omitida para {printer.name} "
-                            f"en {reading_values['timestamp']} (reintento de sync)"
-                        )
-                        skipped += 1
-                        continue
-
-                    reading = request.env['printer.reading'].sudo().create(reading_values)
-
-                    # Procesar contadores
-                    counters_to_create = []
-
-                    # Formato 1: Campos legacy (total_pages, mono_pages, etc.)
-                    has_legacy_counters = False
-                    for field_name, (code, name) in LEGACY_COUNTER_MAP.items():
-                        if field_name in reading_data and reading_data[field_name] is not None:
-                            has_legacy_counters = True
-                            value = reading_data[field_name]
-
-                            # Buscar o crear tipo de contador por código
-                            counter_type = request.env['counter.type'].sudo().search([
-                                ('code', '=', code)
+                        if printer_serial:
+                            printer = request.env['printer.device'].sudo().search([
+                                ('location_id', '=', location.id),
+                                ('serial_number', '=', printer_serial)
                             ], limit=1)
 
-                            if not counter_type:
-                                counter_type = request.env['counter.type'].sudo().create({
-                                    'name': name,
-                                    'code': code,
-                                    'oid': f'legacy.{code}',
-                                    'active': True,
-                                })
-                                _logger.info(f"Tipo de contador legacy creado: {code}")
-
-                            counters_to_create.append({
-                                'reading_id': reading.id,
-                                'counter_type_id': counter_type.id,
-                                'value': int(value) if value else 0,
-                            })
-
-                    # Formato 2: Con OIDs dinámicos
-                    if 'counters' in reading_data and not has_legacy_counters:
-                        for counter_data in reading_data.get('counters', []):
-                            oid = counter_data.get('oid')
-                            value = counter_data.get('value', 0)
-
-                            if not oid:
-                                continue
-
-                            # Buscar o crear tipo de contador por OID
-                            counter_type = request.env['counter.type'].sudo().search([
-                                ('oid', '=', oid)
+                        if not printer and printer_ip:
+                            printer = request.env['printer.device'].sudo().search([
+                                ('location_id', '=', location.id),
+                                ('ip_address', '=', printer_ip)
                             ], limit=1)
 
-                            if not counter_type:
-                                counter_type = request.env['counter.type'].sudo().create({
-                                    'name': f'Contador {oid}',
-                                    'code': f'auto_{oid.replace(".", "_")}',
-                                    'oid': oid,
-                                    'active': True,
+                        if not printer:
+                            identifier = printer_serial or printer_ip
+                            _logger.warning(
+                                f"Impresora '{identifier}' no encontrada en ubicación {location.name}"
+                            )
+                            skipped += 1
+                            continue
+
+                        # Crear lectura (idempotente: si ya existe para este timestamp, saltar)
+                        reading_values = {
+                            'printer_id': printer.id,
+                            'timestamp': parse_timestamp(reading_data.get('timestamp')),
+                            'status': reading_data.get('status', 'unknown'),
+                        }
+
+                        existing_reading = request.env['printer.reading'].sudo()._find_duplicate_reading(
+                            printer.id, reading_values['timestamp']
+                        )
+                        if existing_reading:
+                            _logger.debug(
+                                f"Lectura duplicada omitida para {printer.name} "
+                                f"en {reading_values['timestamp']} (reintento de sync)"
+                            )
+                            skipped += 1
+                            continue
+
+                        reading = request.env['printer.reading'].sudo().create(reading_values)
+
+                        # Procesar contadores
+                        counters_to_create = []
+
+                        # Formato 1: Campos legacy (total_pages, mono_pages, etc.)
+                        has_legacy_counters = False
+                        for field_name, (code, name) in LEGACY_COUNTER_MAP.items():
+                            if field_name in reading_data and reading_data[field_name] is not None:
+                                has_legacy_counters = True
+                                value = reading_data[field_name]
+
+                                # Buscar o crear tipo de contador por código
+                                counter_type = request.env['counter.type'].sudo().search([
+                                    ('code', '=', code)
+                                ], limit=1)
+
+                                if not counter_type:
+                                    counter_type = request.env['counter.type'].sudo().create({
+                                        'name': name,
+                                        'code': code,
+                                        'oid': f'legacy.{code}',
+                                        'active': True,
+                                    })
+                                    _logger.info(f"Tipo de contador legacy creado: {code}")
+
+                                counters_to_create.append({
+                                    'reading_id': reading.id,
+                                    'counter_type_id': counter_type.id,
+                                    'value': int(value) if value else 0,
                                 })
-                                _logger.info(f"Tipo de contador creado automáticamente: {oid}")
 
-                            counters_to_create.append({
-                                'reading_id': reading.id,
-                                'counter_type_id': counter_type.id,
-                                'value': int(value) if value else 0,
-                            })
+                        # Formato 2: Con OIDs dinámicos
+                        if 'counters' in reading_data and not has_legacy_counters:
+                            for counter_data in reading_data.get('counters', []):
+                                oid = counter_data.get('oid')
+                                value = counter_data.get('value', 0)
 
-                    # Crear todos los contadores de una vez
-                    if counters_to_create:
-                        request.env['printer.reading.counter'].sudo().create(counters_to_create)
+                                if not oid:
+                                    continue
 
-                    created += 1
+                                # Buscar o crear tipo de contador por OID
+                                counter_type = request.env['counter.type'].sudo().search([
+                                    ('oid', '=', oid)
+                                ], limit=1)
 
-                    # Actualizar last_reading en impresora
-                    printer.write({
-                        'last_reading': reading_values['timestamp'],
-                        'status': reading_values['status']
-                    })
+                                if not counter_type:
+                                    counter_type = request.env['counter.type'].sudo().create({
+                                        'name': f'Contador {oid}',
+                                        'code': f'auto_{oid.replace(".", "_")}',
+                                        'oid': oid,
+                                        'active': True,
+                                    })
+                                    _logger.info(f"Tipo de contador creado automáticamente: {oid}")
+
+                                counters_to_create.append({
+                                    'reading_id': reading.id,
+                                    'counter_type_id': counter_type.id,
+                                    'value': int(value) if value else 0,
+                                })
+
+                        # Crear todos los contadores de una vez
+                        if counters_to_create:
+                            request.env['printer.reading.counter'].sudo().create(counters_to_create)
+
+                        request.env.flush_all()  # que un error SQL salte dentro del savepoint
+                        created += 1
+
+                        # Actualizar last_reading en impresora
+                        printer.write({
+                            'last_reading': reading_values['timestamp'],
+                            'status': reading_values['status']
+                        })
 
                 except Exception as e:
                     error_msg = f"Error procesando lectura de {reading_data.get('printer_ip', 'unknown')}: {str(e)}"
@@ -505,7 +531,7 @@ class PrinterAPIController(http.Controller):
                 'message': str(e)
             }
 
-    @http.route('/api/printer/sync/consumables', type='json', auth='none', methods=['POST'], csrf=False)
+    @http.route('/api/printer/sync/consumables', type='jsonrpc', auth='none', methods=['POST'], csrf=False, readonly=False)
     @validate_location_token
     def sync_consumables(self, **kwargs):
         """
@@ -529,7 +555,7 @@ class PrinterAPIController(http.Controller):
         }
         """
         try:
-            data = request.jsonrequest
+            data = _get_payload(kwargs)
             consumables_data = data.get('consumables', [])
 
             location = request.printer_location
@@ -541,53 +567,58 @@ class PrinterAPIController(http.Controller):
 
             for consumable_data in consumables_data:
                 try:
-                    printer_ip = consumable_data.get('printer_ip')
-                    supply_name = consumable_data.get('supply_name')
+                    # Savepoint por elemento: un error (p.ej. de una restricción SQL)
+                    # no debe abortar la transacción del resto del lote.
+                    with request.env.cr.savepoint():
+                        printer_ip = consumable_data.get('printer_ip')
+                        supply_name = consumable_data.get('supply_name')
 
-                    if not printer_ip or not supply_name:
-                        errors.append("Consumible sin printer_ip o supply_name")
-                        skipped += 1
-                        continue
+                        if not printer_ip or not supply_name:
+                            errors.append("Consumible sin printer_ip o supply_name")
+                            skipped += 1
+                            continue
 
-                    # Buscar impresora en ESTA ubicación
-                    printer = request.env['printer.device'].sudo().search([
-                        ('location_id', '=', location.id),
-                        ('ip_address', '=', printer_ip)
-                    ], limit=1)
+                        # Buscar impresora en ESTA ubicación
+                        printer = request.env['printer.device'].sudo().search([
+                            ('location_id', '=', location.id),
+                            ('ip_address', '=', printer_ip)
+                        ], limit=1)
 
-                    if not printer:
-                        _logger.warning(
-                            f"Impresora {printer_ip} no encontrada en ubicación {location.name}"
-                        )
-                        skipped += 1
-                        continue
+                        if not printer:
+                            _logger.warning(
+                                f"Impresora {printer_ip} no encontrada en ubicación {location.name}"
+                            )
+                            skipped += 1
+                            continue
 
-                    # Buscar consumible existente
-                    consumable = request.env['printer.consumable'].sudo().search([
-                        ('printer_id', '=', printer.id),
-                        ('supply_name', '=', supply_name)
-                    ], limit=1)
+                        # Buscar consumible existente
+                        consumable = request.env['printer.consumable'].sudo().search([
+                            ('printer_id', '=', printer.id),
+                            ('supply_name', '=', supply_name)
+                        ], limit=1)
 
-                    values = {
-                        'printer_id': printer.id,
-                        'supply_name': supply_name,
-                        'supply_type': consumable_data.get('supply_type'),
-                        'color': consumable_data.get('color'),
-                        'level_percent': consumable_data.get('level_percent'),
-                        'model': consumable_data.get('model'),
-                        'last_update': fields.Datetime.now(),
-                    }
+                        values = {
+                            'printer_id': printer.id,
+                            'supply_name': supply_name,
+                            'supply_type': consumable_data.get('supply_type'),
+                            'color': consumable_data.get('color'),
+                            'level_percent': consumable_data.get('level_percent'),
+                            'model': consumable_data.get('model'),
+                            'last_update': fields.Datetime.now(),
+                        }
 
-                    # No enviar status si no viene, dejar que el modelo lo calcule
-                    if 'status' in consumable_data:
-                        values['status'] = consumable_data['status']
+                        # No enviar status si no viene, dejar que el modelo lo calcule
+                        if 'status' in consumable_data:
+                            values['status'] = consumable_data['status']
 
-                    if consumable:
-                        consumable.write(values)
-                        updated += 1
-                    else:
-                        request.env['printer.consumable'].sudo().create(values)
-                        created += 1
+                        if consumable:
+                            consumable.write(values)
+                            request.env.flush_all()  # que un error SQL salte dentro del savepoint
+                            updated += 1
+                        else:
+                            request.env['printer.consumable'].sudo().create(values)
+                            request.env.flush_all()  # que un error SQL salte dentro del savepoint
+                            created += 1
 
                 except Exception as e:
                     error_msg = f"Error procesando consumible {consumable_data.get('supply_name', 'unknown')}: {str(e)}"
@@ -617,7 +648,7 @@ class PrinterAPIController(http.Controller):
                 'message': str(e)
             }
 
-    @http.route('/api/printer/sync/alerts', type='json', auth='none', methods=['POST'], csrf=False)
+    @http.route('/api/printer/sync/alerts', type='jsonrpc', auth='none', methods=['POST'], csrf=False, readonly=False)
     @validate_location_token
     def sync_alerts(self, **kwargs):
         """
@@ -640,7 +671,7 @@ class PrinterAPIController(http.Controller):
         }
         """
         try:
-            data = request.jsonrequest
+            data = _get_payload(kwargs)
             alerts_data = data.get('alerts', [])
 
             location = request.printer_location
@@ -652,62 +683,64 @@ class PrinterAPIController(http.Controller):
 
             for alert_data in alerts_data:
                 try:
-                    printer_ip = alert_data.get('printer_ip')
-                    if not printer_ip:
-                        errors.append("Alerta sin printer_ip")
-                        skipped += 1
-                        continue
+                    # Savepoint por elemento: un error (p.ej. de una restricción SQL)
+                    # no debe abortar la transacción del resto del lote.
+                    with request.env.cr.savepoint():
+                        printer_ip = alert_data.get('printer_ip')
+                        if not printer_ip:
+                            errors.append("Alerta sin printer_ip")
+                            skipped += 1
+                            continue
 
-                    # Buscar impresora en ESTA ubicación
-                    printer = request.env['printer.device'].sudo().search([
-                        ('location_id', '=', location.id),
-                        ('ip_address', '=', printer_ip)
-                    ], limit=1)
+                        # Buscar impresora en ESTA ubicación
+                        printer = request.env['printer.device'].sudo().search([
+                            ('location_id', '=', location.id),
+                            ('ip_address', '=', printer_ip)
+                        ], limit=1)
 
-                    if not printer:
-                        _logger.warning(
-                            f"Impresora {printer_ip} no encontrada en ubicación {location.name}"
-                        )
-                        skipped += 1
-                        continue
+                        if not printer:
+                            _logger.warning(
+                                f"Impresora {printer_ip} no encontrada en ubicación {location.name}"
+                            )
+                            skipped += 1
+                            continue
 
-                    # Verificar si ya existe una alerta similar reciente (últimas 24 horas)
-                    timestamp = alert_data.get('timestamp')
-                    if timestamp:
-                        from datetime import timedelta
-                        parsed_timestamp = parse_timestamp(timestamp)
-                        time_threshold = parsed_timestamp - timedelta(hours=24)
-                    else:
-                        from datetime import timedelta
-                        parsed_timestamp = datetime.now()
-                        time_threshold = datetime.now() - timedelta(hours=24)
-                        timestamp = parsed_timestamp
+                        # Verificar si ya existe una alerta similar reciente (últimas 24 horas)
+                        timestamp = alert_data.get('timestamp')
+                        if timestamp:
+                            parsed_timestamp = parse_timestamp(timestamp)
+                            time_threshold = parsed_timestamp - timedelta(hours=24)
+                        else:
+                            parsed_timestamp = datetime.now()
+                            time_threshold = datetime.now() - timedelta(hours=24)
+                            timestamp = parsed_timestamp
 
-                    existing = request.env['printer.alert'].sudo().search([
-                        ('printer_id', '=', printer.id),
-                        ('alert_type', '=', alert_data.get('alert_type')),
-                        ('message', '=', alert_data.get('message')),
-                        ('timestamp', '>=', time_threshold),
-                        ('resolved', '=', False)
-                    ], limit=1)
+                        existing = request.env['printer.alert'].sudo().search([
+                            ('printer_id', '=', printer.id),
+                            ('alert_type', '=', alert_data.get('alert_type')),
+                            ('message', '=', alert_data.get('message')),
+                            ('timestamp', '>=', time_threshold),
+                            ('resolved', '=', False)
+                        ], limit=1)
 
-                    if existing:
-                        duplicates += 1
-                        continue
+                        if existing:
+                            duplicates += 1
+                            continue
 
-                    # Crear alerta
-                    alert_values = {
-                        'printer_id': printer.id,
-                        'alert_type': alert_data.get('alert_type', 'other'),
-                        'severity': normalize_severity(alert_data.get('severity', 'medium')),
-                        'message': alert_data.get('message'),
-                        'timestamp': parsed_timestamp,
-                        'resolved': alert_data.get('resolved', False),
-                        'resolved_at': alert_data.get('resolved_at'),
-                    }
+                        # Crear alerta
+                        alert_values = {
+                            'printer_id': printer.id,
+                            'alert_type': alert_data.get('alert_type', 'other'),
+                            'severity': normalize_severity(alert_data.get('severity', 'medium')),
+                            'message': alert_data.get('message'),
+                            'timestamp': parsed_timestamp,
+                            'resolved': alert_data.get('resolved', False),
+                            'resolved_at': parse_timestamp(alert_data['resolved_at']) if alert_data.get('resolved_at') else False,
+                        }
 
-                    request.env['printer.alert'].sudo().create(alert_values)
-                    created += 1
+                        request.env['printer.alert'].sudo().create(alert_values)
+                        request.env.flush_all()  # que un error SQL salte dentro del savepoint
+                        created += 1
 
                 except Exception as e:
                     error_msg = f"Error procesando alerta para {alert_data.get('printer_ip', 'unknown')}: {str(e)}"
@@ -811,9 +844,9 @@ class PrinterAPIController(http.Controller):
                 mimetype='application/json'
             )
 
-        location = request.env['printer.location'].sudo().search([
-            ('access_token', '=', location_token)
-        ], limit=1)
+        location = request.env['printer.location'].sudo()._get_by_access_token(
+            location_token, active_only=False
+        )
 
         if not location:
             return Response(

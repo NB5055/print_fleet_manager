@@ -6,6 +6,8 @@ Gestión de tokens por ubicación/conexión
 
 from odoo import models, fields, api
 from odoo.exceptions import ValidationError
+import hashlib
+import hmac
 import secrets
 import logging
 
@@ -56,8 +58,18 @@ class PrinterLocation(models.Model):
         string='Token de Acceso',
         readonly=True,
         copy=False,
-        index=True,
+        groups='print_fleet_manager.group_printer_manager',
         help='Token único para autenticación de PrintServer en esta ubicación'
+    )
+    # Huella SHA-256 del token: la API busca por la huella (indexada) y luego
+    # compara el token en tiempo constante, sin usar el token como clave de búsqueda.
+    access_token_hash = fields.Char(
+        string='Huella del Token',
+        compute='_compute_access_token_hash',
+        store=True,
+        index=True,
+        copy=False,
+        groups='print_fleet_manager.group_printer_manager',
     )
     token_active = fields.Boolean(
         string='Token Activo',
@@ -198,18 +210,46 @@ class PrinterLocation(models.Model):
         """Genera un token seguro de 32 caracteres"""
         return secrets.token_urlsafe(32)
 
+    @staticmethod
+    def _hash_token(token):
+        return hashlib.sha256(token.encode('utf-8')).hexdigest() if token else False
+
+    @api.depends('access_token')
+    def _compute_access_token_hash(self):
+        for record in self:
+            record.access_token_hash = self._hash_token(record.access_token)
+
     @api.model
-    def create(self, vals):
+    def _get_by_access_token(self, token, active_only=True):
+        """Devuelve la ubicación (sudo) cuyo token coincide, o un recordset vacío.
+
+        La búsqueda se hace por la huella SHA-256 y la comparación final del
+        token se hace en tiempo constante (hmac.compare_digest).
+        """
+        if not token or not isinstance(token, str):
+            return self.sudo().browse()
+        domain = [('access_token_hash', '=', self._hash_token(token))]
+        if active_only:
+            domain.append(('is_active', '=', True))
+        for location in self.sudo().search(domain):
+            if location.access_token and hmac.compare_digest(
+                location.access_token.encode('utf-8'), token.encode('utf-8')
+            ):
+                return location
+        return self.sudo().browse()
+
+    @api.model_create_multi
+    def create(self, vals_list):
         """Al crear, genera automáticamente un token si no existe"""
-        if not vals.get('access_token'):
-            vals['access_token'] = self._generate_token()
-            vals['token_created_date'] = fields.Datetime.now()
-        return super(PrinterLocation, self).create(vals)
+        for vals in vals_list:
+            if not vals.get('access_token'):
+                vals['access_token'] = self._generate_token()
+                vals['token_created_date'] = fields.Datetime.now()
+        return super().create(vals_list)
 
     def action_generate_token(self):
         """Genera un nuevo token de acceso y muestra wizard con el token"""
         self.ensure_one()
-        old_token = self.access_token
         new_token = self._generate_token()
 
         self.write({
@@ -221,7 +261,7 @@ class PrinterLocation(models.Model):
 
         _logger.info(
             f"Nuevo token generado para ubicación '{self.name}' "
-            f"(Cliente: {self.partner_id.name}). Token anterior: {old_token[:10] if old_token else 'N/A'}..."
+            f"(Cliente: {self.partner_id.name})"
         )
 
         # Crear wizard para mostrar el token
@@ -285,7 +325,7 @@ class PrinterLocation(models.Model):
             'type': 'ir.actions.act_window',
             'name': f'Impresoras - {self.name}',
             'res_model': 'printer.device',
-            'view_mode': 'kanban,tree,form',
+            'view_mode': 'kanban,list,form',
             'domain': [('location_id', '=', self.id)],
             'context': {
                 'default_location_id': self.id,
@@ -300,10 +340,10 @@ class PrinterLocation(models.Model):
             'type': 'ir.actions.act_window',
             'name': f'Reporte de Uso - {self.name}',
             'res_model': 'printer.reading',
-            'view_mode': 'graph,pivot,tree',
+            'view_mode': 'graph,pivot,list',
             'domain': [('printer_id.location_id', '=', self.id)],
             'context': {
-                'search_default_group_by_printer': 1,
+                'search_default_group_printer': 1,
                 'search_default_this_month': 1,
             }
         }
@@ -336,22 +376,21 @@ class PrinterLocation(models.Model):
         """Valida que el token sea único"""
         for record in self:
             if record.access_token:
-                existing = self.search([
+                existing = self.sudo().search_count([
                     ('id', '!=', record.id),
-                    ('access_token', '=', record.access_token)
-                ])
+                    ('access_token_hash', '=', self._hash_token(record.access_token))
+                ], limit=1)
                 if existing:
                     raise ValidationError(
                         "El token de acceso debe ser único. "
                         "Por favor, genere un nuevo token."
                     )
 
-    def name_get(self):
+    @api.depends('name', 'partner_id.name', 'printer_count')
+    def _compute_display_name(self):
         """Personaliza el nombre mostrado"""
-        result = []
         for record in self:
             name = f"{record.partner_id.name} - {record.name}"
             if record.printer_count:
                 name += f" ({record.printer_count} impresoras)"
-            result.append((record.id, name))
-        return result
+            record.display_name = name

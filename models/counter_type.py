@@ -16,6 +16,7 @@ class CounterType(models.Model):
     _description = 'Tipo de Contador SNMP'
     _order = 'sequence, name'
     _rec_name = 'name'
+    _rec_names_search = ['name', 'code', 'oid']
 
     # Identificación
     oid = fields.Char(
@@ -67,9 +68,10 @@ class CounterType(models.Model):
     )
 
     # Constraint SQL
-    _sql_constraints = [
-        ('oid_unique', 'UNIQUE(oid)', 'El OID debe ser único. Ya existe un tipo con este OID.')
-    ]
+    _oid_unique = models.Constraint(
+        'UNIQUE(oid)',
+        'El OID debe ser único. Ya existe un tipo con este OID.',
+    )
 
     @api.depends()
     def _compute_usage_count(self):
@@ -92,12 +94,11 @@ class CounterType(models.Model):
                         f"OID inválido: '{record.oid}'. Debe ser formato SNMP (ej: 1.3.6.1.2.1.43.10.2.1.4.1.1)"
                     )
 
-    def name_get(self):
-        """Muestra OID junto al nombre"""
-        result = []
+    @api.depends('name', 'code')
+    def _compute_display_name(self):
+        """Muestra el código junto al nombre"""
         for record in self:
             name = f"{record.name}"
             if record.code:
                 name += f" [{record.code}]"
-            result.append((record.id, name))
-        return result
+            record.display_name = name

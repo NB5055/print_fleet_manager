@@ -15,7 +15,7 @@ class PrinterConsumable(models.Model):
     _name = 'printer.consumable'
     _description = 'Consumible de Impresora'
     _order = 'printer_id, supply_name'
-    _rec_name = 'display_name'
+    _rec_names_search = ['supply_name', 'printer_id']
 
     # Relaciones
     printer_id = fields.Many2one(
@@ -144,10 +144,6 @@ class PrinterConsumable(models.Model):
     )
 
     # Campos Computados
-    display_name = fields.Char(
-        string='Nombre',
-        compute='_compute_display_name'
-    )
     level_status = fields.Char(
         string='Estado del Nivel',
         compute='_compute_level_status'
@@ -158,21 +154,28 @@ class PrinterConsumable(models.Model):
         search='_search_needs_replacement'
     )
 
-    @api.depends('supply_name', 'printer_id', 'color', 'supply_type')
-    def _compute_display_name(self):
-        """Genera nombre descriptivo"""
-        for record in self:
-            parts = []
-            if record.printer_id:
-                parts.append(record.printer_id.name)
-            if record.supply_type:
-                parts.append(dict(record._fields['supply_type'].selection).get(record.supply_type, ''))
-            if record.color and record.color != 'other':
-                parts.append(dict(record._fields['color'].selection).get(record.color, ''))
-            if record.supply_name:
-                parts.append(record.supply_name)
+    def _get_supply_label(self):
+        """Nombre descriptivo del consumible (sin el nivel)"""
+        self.ensure_one()
+        parts = []
+        if self.printer_id:
+            parts.append(self.printer_id.name)
+        if self.supply_type:
+            parts.append(dict(self._fields['supply_type'].selection).get(self.supply_type, ''))
+        if self.color and self.color != 'other':
+            parts.append(dict(self._fields['color'].selection).get(self.color, ''))
+        if self.supply_name:
+            parts.append(self.supply_name)
+        return ' - '.join(filter(None, parts)) or 'Consumible Sin Nombre'
 
-            record.display_name = ' - '.join(filter(None, parts)) or 'Consumible Sin Nombre'
+    @api.depends('supply_name', 'printer_id.name', 'color', 'supply_type', 'level_percent')
+    def _compute_display_name(self):
+        """Personaliza el nombre mostrado"""
+        for record in self:
+            name = record._get_supply_label()
+            if record.level_percent is not None:
+                name += f" ({record.level_percent:.1f}%)"
+            record.display_name = name
 
     @api.depends('level_percent', 'status')
     def _compute_level_status(self):
@@ -195,17 +198,26 @@ class PrinterConsumable(models.Model):
 
     def _search_needs_replacement(self, operator, value):
         """Permite buscar consumibles que necesitan reemplazo"""
+        if operator not in ('in', 'not in'):
+            return NotImplemented
         consumables = self.search([('is_active', '=', True)])
-        result_ids = []
-        for consumable in consumables:
-            needs = (
-                consumable.status in ['critical', 'empty', 'replace'] or
-                (consumable.level_percent is not None and
-                 consumable.level_percent <= consumable.critical_threshold)
+        needing_ids = [
+            consumable.id for consumable in consumables
+            if consumable.status in ['critical', 'empty', 'replace'] or (
+                consumable.level_percent is not None
+                and consumable.level_percent <= consumable.critical_threshold
             )
-            if (operator == '=' and needs == value) or (operator == '!=' and needs != value):
-                result_ids.append(consumable.id)
-        return [('id', 'in', result_ids)]
+        ]
+        values = {bool(v) for v in value}
+        if values == {True, False}:
+            positive = None  # todos
+        else:
+            positive = True in values
+        if operator == 'not in' and positive is not None:
+            positive = not positive
+        if positive is None:
+            return [] if operator == 'in' else [('id', '=', False)]
+        return [('id', 'in' if positive else 'not in', needing_ids)]
 
     @api.constrains('level_percent')
     def _check_level_percent(self):
@@ -228,12 +240,13 @@ class PrinterConsumable(models.Model):
                         "El umbral crítico debe ser menor que el umbral bajo"
                     )
 
-    @api.model
-    def create(self, vals):
+    @api.model_create_multi
+    def create(self, vals_list):
         """Al crear, registra la primera detección"""
-        if 'first_detected' not in vals:
-            vals['first_detected'] = fields.Datetime.now()
-        return super(PrinterConsumable, self).create(vals)
+        for vals in vals_list:
+            if 'first_detected' not in vals:
+                vals['first_detected'] = fields.Datetime.now()
+        return super().create(vals_list)
 
     def write(self, vals):
         """Al actualizar nivel, guarda el nivel anterior"""
@@ -254,7 +267,7 @@ class PrinterConsumable(models.Model):
                     else:
                         vals['status'] = 'ok'
 
-        return super(PrinterConsumable, self).write(vals)
+        return super().write(vals)
 
     def action_mark_as_replaced(self):
         """Marca el consumible como reemplazado"""
@@ -265,13 +278,13 @@ class PrinterConsumable(models.Model):
             'status': 'ok',
             'previous_level': self.level_percent or 0.0
         })
-        _logger.info(f"Consumible marcado como reemplazado: {self.display_name}")
+        _logger.info(f"Consumible marcado como reemplazado: {self._get_supply_label()}")
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
                 'title': 'Consumible Reemplazado',
-                'message': f'{self.display_name} ha sido marcado como reemplazado',
+                'message': f'{self._get_supply_label()} ha sido marcado como reemplazado',
                 'type': 'success',
                 'sticky': False,
             }
@@ -287,7 +300,7 @@ class PrinterConsumable(models.Model):
             'printer_id': self.printer_id.id,
             'alert_type': alert_type,
             'severity': severity,
-            'message': f"{self.display_name}: Nivel al {self.level_percent:.1f}%",
+            'message': f"{self._get_supply_label()}: Nivel al {self.level_percent:.1f}%",
             'resolved': False,
         })
         return True
@@ -319,13 +332,3 @@ class PrinterConsumable(models.Model):
 
         _logger.info(f"Verificación de consumibles completada. {created_count} alertas creadas.")
         return created_count
-
-    def name_get(self):
-        """Personaliza el nombre mostrado"""
-        result = []
-        for record in self:
-            name = record.display_name
-            if record.level_percent is not None:
-                name += f" ({record.level_percent:.1f}%)"
-            result.append((record.id, name))
-        return result
